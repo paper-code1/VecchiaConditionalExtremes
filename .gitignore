@@ -1,0 +1,7 @@
+trash/
+.history/
+.vscode/
+
+*.ipynb
+*.txt
+*.pdf
