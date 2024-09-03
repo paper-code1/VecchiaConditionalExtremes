@@ -4,7 +4,7 @@
 #include "random_points.h"
 
 void print_usage(const std::string& program_name) {
-    std::cerr << "Usage: " << program_name << " --num_loc <number_of_locations> --sub_partition <num_blocks_x> <num_blocks_y> [--print]" << std::endl;
+    std::cerr << "Usage: " << program_name << " --num_loc_per_process <number_of_locations_per_process> --sub_partition <num_blocks_x> <num_blocks_y> Note that <num_loc_per_process> * <num_blocks_x> == <num_blocks_y> in the [0, 1] * [0, 1] [--print]" << std::endl;
 }
 
 bool parse_args(int argc, char** argv, Options& opts) {
@@ -12,9 +12,11 @@ bool parse_args(int argc, char** argv, Options& opts) {
         return false;
     }
 
+    opts.m = 30;
+
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--num_loc") {
+        if (arg == "--num_loc_per_process") {
             if (i + 1 < argc) {
                 opts.numPointsPerProcess = std::atoi(argv[++i]);
             } else {

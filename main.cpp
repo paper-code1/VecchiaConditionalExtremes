@@ -3,9 +3,12 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <chrono>
+#include <thread>
 #include "random_points.h"
 #include "block_info.h"
 #include "distance_calc.h"
+#include "gpu_operations.h"
 
 bool parse_args(int argc, char **argv, Options &opts);
 
@@ -17,7 +20,7 @@ int main(int argc, char **argv)
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    Options opts = {0, 0, 0, 120, false};
+    Options opts = {0, 0, 0, 30, false};
 
     if (!parse_args(argc, argv, opts))
     {
@@ -84,7 +87,19 @@ int main(int argc, char **argv)
     // }
 
     // 5. independent computation of log-likelihood
+    // Determine which GPU to use based on the rank
+    int gpu_id = (rank < 20) ? 0 : 1; // this is used for personal server, hen/swan/...
 
+    // Step 1: Copy data to GPU
+    GpuData gpuData = copyDataToGPU(gpu_id, blockInfos);
+
+    // // Step 2: Perform computation
+    // performComputationOnGPU(gpuData);
+    std::this_thread::sleep_for(std::chrono::seconds(3)); 
+
+    // Step 3: Cleanup GPU memory
+    cleanupGpuMemory(gpuData);
+    
     MPI_Finalize();
     return EXIT_SUCCESS;
 }
