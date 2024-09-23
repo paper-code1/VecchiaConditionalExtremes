@@ -4,15 +4,6 @@
 #include <vector>
 #include <utility>
 
-// Structure to store command line options
-struct Options {
-    int numPointsPerProcess;
-    int numBlocksX;
-    int numBlocksY;
-    int m;  // the number of nearest neighbor 
-    bool print;
-};
-
 // Function to generate random 2D points
 std::vector<std::pair<double, double>> generateRandomPoints(int numPointsPerProcess);
 

@@ -66,14 +66,17 @@ LIB+= -lstdc++
 #---------------- make -------------------------
 
 TARGET = $(BIN_DIR)/generate_points
-OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o $(OBJ_DIR)/input_parser.o $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o 
+OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o 
+
+# Add input_parser.h as a dependency for all object files
+DEPS = include/input_parser.h
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(TARGET) $(OBJS) $(LIB) $(LIB_PATH)
 
-$(OBJ_DIR)/main.o: main.cpp
+$(OBJ_DIR)/main.o: main.cpp $(DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp

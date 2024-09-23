@@ -11,6 +11,8 @@ GpuData copyDataToGPU(int gpu_id, const std::vector<BlockInfo> &blockInfos)
     GpuData gpuData;
     gpuData.ldda_points.resize(blockInfos.size());
     gpuData.ldda_neighbors.resize(blockInfos.size());
+    gpuData.lda_points.resize(blockInfos.size());
+    gpuData.lda_neighbors.resize(blockInfos.size());
     gpuData.ldda_cov.resize(blockInfos.size());
     gpuData.ldda_cross_cov.resize(blockInfos.size());
     gpuData.ldda_conditioning_cov.resize(blockInfos.size());
@@ -40,6 +42,8 @@ GpuData copyDataToGPU(int gpu_id, const std::vector<BlockInfo> &blockInfos)
         // 32 is the aligned 32 threads in a warp in GPU
         gpuData.ldda_points[i] = magma_roundup(m_points, 32); 
         gpuData.ldda_neighbors[i] = magma_roundup(m_nearest_neighbor, 32); 
+        gpuData.lda_points[i] = m_points;
+        gpuData.lda_neighbors[i] = m_nearest_neighbor;
         gpuData.ldda_cov[i] = gpuData.ldda_points[i];
         gpuData.ldda_cross_cov[i] = gpuData.ldda_neighbors[i];
         gpuData.ldda_conditioning_cov[i] = gpuData.ldda_neighbors[i];
@@ -52,23 +56,15 @@ GpuData copyDataToGPU(int gpu_id, const std::vector<BlockInfo> &blockInfos)
     }
 
     // Allocate contiguous memory on GPU
-    cudaMalloc(&gpuData.h_points_memory, total_points_size);
-    cudaMalloc(&gpuData.h_nearestNeighbors_memory, total_neighbors_size);
-    cudaMalloc(&gpuData.h_cov_memory, total_cov_size);
-    cudaMalloc(&gpuData.h_conditioning_cov_memory, total_conditioning_cov_size);
-    cudaMalloc(&gpuData.h_cross_cov_memory, total_cross_cov_size);
-
-    // std::cout << "rank " << rank << " ," 
-    // << "total_points_size " << total_points_size / sizeof(std::pair<double, double>)<< " ," 
-    // << "total_neighbors_size " << total_neighbors_size / sizeof(std::pair<double, double>) << " ," 
-    // << "total_cov_size " << total_cov_size / sizeof(double)<< " ," 
-    // << "total_conditioning_cov_size " << total_conditioning_cov_size / sizeof(double) << " ," 
-    // << "total_cross_cov_size " << total_cross_cov_size / sizeof(double) << "." 
-    // << std::endl;
+    cudaMalloc(&gpuData.d_points_memory, total_points_size);
+    cudaMalloc(&gpuData.d_nearestNeighbors_memory, total_neighbors_size);
+    cudaMalloc(&gpuData.d_cov_memory, total_cov_size);
+    cudaMalloc(&gpuData.d_conditioning_cov_memory, total_conditioning_cov_size);
+    cudaMalloc(&gpuData.d_cross_cov_memory, total_cross_cov_size);
     
     // Assign pointers to the beginning of each block's memory and copy data
-    double *points_ptr = gpuData.h_points_memory;
-    double *neighbors_ptr = gpuData.h_nearestNeighbors_memory;
+    double *points_ptr = gpuData.d_points_memory;
+    double *neighbors_ptr = gpuData.d_nearestNeighbors_memory;
 
     for (size_t i = 0; i < blockInfos.size(); ++i)
     {
@@ -96,11 +92,11 @@ void performComputationOnGPU(const GpuData &gpuData)
 // Function to clean up GPU memory
 void cleanupGpuMemory(GpuData &gpuData)
 {
-    cudaFree(gpuData.h_points_memory);
-    cudaFree(gpuData.h_nearestNeighbors_memory);
-    cudaFree(gpuData.h_cov_memory);
-    cudaFree(gpuData.h_conditioning_cov_memory);
-    cudaFree(gpuData.h_cross_cov_memory);
+    cudaFree(gpuData.d_points_memory);
+    cudaFree(gpuData.d_nearestNeighbors_memory);
+    cudaFree(gpuData.d_cov_memory);
+    cudaFree(gpuData.d_conditioning_cov_memory);
+    cudaFree(gpuData.d_cross_cov_memory);
 
     delete[] gpuData.h_points_array;
     delete[] gpuData.h_nearestNeighbors_array;

@@ -9,8 +9,8 @@
 #include "block_info.h"
 #include "distance_calc.h"
 #include "gpu_operations.h"
+#include "input_parser.h"
 
-bool parse_args(int argc, char **argv, Options &opts);
 
 int main(int argc, char **argv)
 {
@@ -20,13 +20,21 @@ int main(int argc, char **argv)
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    Options opts = {0, 0, 0, 30, false};
-
-    if (!parse_args(argc, argv, opts))
-    {
-        std::cerr << "Usage: " << argv[0] << " --num_loc <number_of_locations> --sub_partition <num_blocks_x> <num_blocks_y> [--print]" << std::endl;
+    Opts opts;
+    if (!parse_args(argc, argv, opts)) {
+        if (rank == 0) {
+            std::cerr << "Failed to parse command line arguments." << std::endl;
+        }
         MPI_Finalize();
-        return EXIT_FAILURE;
+        return 1;
+    }
+
+    // Use the parsed options
+    if (rank == 0 && opts.print) {
+        std::cout << "Number of points per process: " << opts.numPointsPerProcess << std::endl;
+        std::cout << "Number of blocks in X direction: " << opts.numBlocksX << std::endl;
+        std::cout << "Number of blocks in Y direction: " << opts.numBlocksY << std::endl;
+        std::cout << "M value: " << opts.m << std::endl;
     }
 
     // 1. Generate random points

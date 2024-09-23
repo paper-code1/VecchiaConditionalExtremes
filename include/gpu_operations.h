@@ -20,11 +20,13 @@ struct GpuData
     std::vector<int> ldda_cov;
     std::vector<int> ldda_cross_cov;
     std::vector<int> ldda_conditioning_cov;
-    double *h_points_memory;           // Contiguous memory for points
-    double *h_nearestNeighbors_memory; // Contiguous memory for nearest neighbors
-    double *h_cov_memory;           // Contiguous memory for covariance matrix
-    double *h_cross_cov_memory;           // Contiguous memory for cross covariance matrix
-    double *h_conditioning_cov_memory;           // Contiguous memory for conditioning covariance matrix
+    std::vector<int> lda_points;      // leading dimension for CPU points (varied)
+    std::vector<int> lda_neighbors;   // leading dimension for CPU points (varied)
+    double *d_points_memory;           // Contiguous memory for points
+    double *d_nearestNeighbors_memory; // Contiguous memory for nearest neighbors
+    double *d_cov_memory;           // Contiguous memory for covariance matrix
+    double *d_cross_cov_memory;           // Contiguous memory for cross covariance matrix
+    double *d_conditioning_cov_memory;           // Contiguous memory for conditioning covariance matrix
 };
 
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
