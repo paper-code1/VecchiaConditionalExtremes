@@ -10,7 +10,7 @@
 #include "distance_calc.h"
 #include "gpu_operations.h"
 #include "input_parser.h"
-
+#include "gpu_covariance.h"
 
 int main(int argc, char **argv)
 {
@@ -35,17 +35,18 @@ int main(int argc, char **argv)
         std::cout << "Number of blocks in X direction: " << opts.numBlocksX << std::endl;
         std::cout << "Number of blocks in Y direction: " << opts.numBlocksY << std::endl;
         std::cout << "M value: " << opts.m << std::endl;
+        std::cout << "Theta: " << opts.theta[0] << ", " << opts.theta[1] << ", " << opts.theta[2] << std::endl;
     }
 
     // 1. Generate random points
-    std::vector<std::pair<double, double>> localPoints = generateRandomPoints(opts.numPointsPerProcess);
+    std::vector<PointMetadata> localPoints = generateRandomPoints(opts.numPointsPerProcess);
 
     // 2.1 Partition points and communicate them
-    std::vector<std::pair<double, double>> allPoints;
+    std::vector<PointMetadata> allPoints;
     partitionPoints(localPoints, allPoints);
 
     // 2.2 Perform finer partitioning within each processor
-    std::vector<std::vector<std::pair<double, double>>> finerPartitions;
+    std::vector<std::vector<PointMetadata>> finerPartitions;
     finerPartition(allPoints, opts.numBlocksX, opts.numBlocksY, finerPartitions);
 
     // 2.3 Calculate centers of gravity for each block
@@ -72,38 +73,17 @@ int main(int argc, char **argv)
     // // send it to corresponding processors)
     // // Here, you could set the first 100 need to obtain all previous blocks
     // Process and send blocks based on distance threshold and special rule for the first 100 blocks
-    processAndSendBlocks(blockInfos, allCenters, opts.m);
-
-    // // debug: Print block information on each processor
-    // if (rank == 0)
-    // {
-    //     if (opts.print)
-    //     {
-    //         std::cout << "Processor " << rank << " block information:\n";
-    //         for (const auto &blockInfo : blockInfos)
-    //         {
-    //             std::cout << "Local Order: " << blockInfo.localOrder
-    //                       << ", Global Order: " << blockInfo.globalOrder
-    //                       << ", Center: (" << blockInfo.center.first << ", " << blockInfo.center.second << ")\n";
-    //             std::cout << "Points:\n";
-    //             for (const auto &point : blockInfo.points)
-    //             {
-    //                 std::cout << "(" << point.first << ", " << point.second << ")\n";
-    //             }
-    //         }
-    //     }
-    // }
-
+    processAndSendBlocks(blockInfos, allCenters, opts.m, opts.distance_threshold);
+    MPI_Barrier(MPI_COMM_WORLD);
     // 5. independent computation of log-likelihood
     // Determine which GPU to use based on the rank
     int gpu_id = (rank < 20) ? 0 : 1; // this is used for personal server, hen/swan/...
 
     // Step 1: Copy data to GPU
     GpuData gpuData = copyDataToGPU(gpu_id, blockInfos);
-
-    // // Step 2: Perform computation
-    // performComputationOnGPU(gpuData);
-    std::this_thread::sleep_for(std::chrono::seconds(3)); 
+    
+    // Step 2: Perform computation
+    performComputationOnGPU(gpuData, opts.theta);
 
     // Step 3: Cleanup GPU memory
     cleanupGpuMemory(gpuData);

@@ -5,9 +5,7 @@
 #include <utility>
 #include "block_info.h"
 
-#define DISTANCE_THRESHOLD 0.2  // You can adjust this value as needed
-
 // Function to process and send blocks based on distance threshold and special rule for the first 100 blocks
-void processAndSendBlocks(std::vector<BlockInfo>& blockInfos, const std::vector<std::pair<double, double>>& allCenters, int m);
+void processAndSendBlocks(std::vector<BlockInfo>& blockInfos, const std::vector<std::pair<double, double>>& allCenters, int m, double distance_threshold);
 
 #endif // DISTANCE_CALC_H

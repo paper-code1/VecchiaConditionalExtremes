@@ -10,7 +10,7 @@ CXX = mpic++
 NVCC=$(_CUDA_ROOT_)/bin/nvcc
 
 NVOPTS = -ccbin $(CXX) --compiler-options -fno-strict-aliasing
-CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp 
+CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare
 
 ifdef _DEBUG_
   CXXFLAGS += -g -Xcompiler -rdynamic
@@ -66,10 +66,12 @@ LIB+= -lstdc++
 #---------------- make -------------------------
 
 TARGET = $(BIN_DIR)/generate_points
-OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o 
+OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o $(OBJ_DIR)/gpu_covariance.o
 
 # Add input_parser.h as a dependency for all object files
-DEPS = include/input_parser.h
+DEPS=
+DEPS+=include/input_parser.h
+DEPS+=include/gpu_covariance.h
 
 all: $(TARGET)
 
@@ -81,6 +83,9 @@ $(OBJ_DIR)/main.o: main.cpp $(DEPS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu
+	$(NVCC) $(NVOPTS) $(INCLUDES) -c $< -o $@
 
 clean:
 	rm -f $(OBJ_DIR)/*.o $(TARGET)

@@ -12,6 +12,8 @@ struct Opts
     int numBlocksY;
     int m; // the number of nearest neighbor
     bool print;
+    double distance_threshold;
+    std::vector<double> theta;
 };
 
 bool parse_args(int argc, char **argv, Opts &opts)
@@ -22,6 +24,8 @@ bool parse_args(int argc, char **argv, Opts &opts)
     ("sub_partition", "Number of blocks in x and y directions (format: x,y)", cxxopts::value<std::vector<int>>()->default_value("2,40"))
     ("print", "Print additional information", cxxopts::value<bool>()->default_value("false"))
     ("m", "Special rule for the first 100 blocks", cxxopts::value<int>()->default_value("30"))
+    ("distance_threshold", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
+    ("theta", "Parameters for the covariance function", cxxopts::value<std::vector<double>>()->default_value("1.0,0.1,0.5"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -47,6 +51,7 @@ bool parse_args(int argc, char **argv, Opts &opts)
     }
     opts.print = result["print"].as<bool>();
     opts.m = result["m"].as<int>();
-
+    opts.distance_threshold = result["distance_threshold"].as<double>();
+    opts.theta = result["theta"].as<std::vector<double>>();
     return true;
 }

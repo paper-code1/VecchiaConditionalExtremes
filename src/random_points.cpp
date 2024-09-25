@@ -14,10 +14,10 @@ double generateRandomDouble()
 }
 
 // Function to generate random points
-std::vector<std::pair<double, double>> generateRandomPoints(int numPointsPerProcess)
+std::vector<PointMetadata> generateRandomPoints(int numPointsPerProcess)
 {
-    std::vector<std::pair<double, double>> points;
-    points.reserve(numPointsPerProcess);
+    std::vector<PointMetadata> pointsMetadata;
+    pointsMetadata.resize(numPointsPerProcess);
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -25,14 +25,18 @@ std::vector<std::pair<double, double>> generateRandomPoints(int numPointsPerProc
 
     for (int i = 0; i < numPointsPerProcess; ++i)
     {
-        points.emplace_back(generateRandomDouble(), generateRandomDouble());
+        for (int j = 0; j < DIMENSION; ++j)
+        {
+            pointsMetadata[i].coordinates[j] = generateRandomDouble();
+        }
+        pointsMetadata[i].observation = generateRandomDouble();
     }
 
-    return points;
+    return pointsMetadata;
 }
 
 // Function to partition points and communicate them to the appropriate processors
-void partitionPoints(const std::vector<std::pair<double, double>> &localPoints, std::vector<std::pair<double, double>> &allPoints)
+void partitionPoints(const std::vector<PointMetadata> &localMetadata, std::vector<PointMetadata> &allMetadata)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -42,17 +46,17 @@ void partitionPoints(const std::vector<std::pair<double, double>> &localPoints, 
     std::vector<int> sendCounts(size, 0);
     std::vector<int> sendDisplacements(size, 0);
 
-    std::vector<std::vector<std::pair<double, double>>> sendBuffers(size);
+    std::vector<std::vector<PointMetadata>> sendBuffers(size);
 
-    for (const auto &point : localPoints)
+    for (const auto &pointmeta : localMetadata)
     {
-        int targetProcess = std::min(static_cast<int>(point.first * size), size - 1);
-        sendBuffers[targetProcess].push_back(point);
+        int targetProcess = std::min(static_cast<int>(pointmeta.coordinates[0] * size), size - 1);
+        sendBuffers[targetProcess].push_back(pointmeta);
     }
 
     for (int i = 0; i < size; ++i)
     {
-        sendCounts[i] = sendBuffers[i].size() * 2; // Each point has 2 doubles
+        sendCounts[i] = sendBuffers[i].size() * (DIMENSION + 1); // Each point has DIMENSION + 1 doubles
     }
 
     std::vector<double> sendData;
@@ -60,8 +64,11 @@ void partitionPoints(const std::vector<std::pair<double, double>> &localPoints, 
     {
         for (const auto &point : sendBuffers[i])
         {
-            sendData.push_back(point.first);
-            sendData.push_back(point.second);
+            for (int j = 0; j < DIMENSION; ++j)
+            {
+                sendData.push_back(point.coordinates[j]);
+            }
+            sendData.push_back(point.observation);
         }
     }
 
@@ -88,16 +95,22 @@ void partitionPoints(const std::vector<std::pair<double, double>> &localPoints, 
     MPI_Alltoallv(sendData.data(), sendCounts.data(), sendDisplacements.data(), MPI_DOUBLE,
                   recvData.data(), recvCounts.data(), recvDisplacements.data(), MPI_DOUBLE, MPI_COMM_WORLD);
 
-    // Convert received data back to pairs
-    allPoints.clear();
-    for (int i = 0; i < totalRecvCount; i += 2)
+    // Convert received data back to PointMetadata
+    allMetadata.clear();
+    for (int i = 0; i < totalRecvCount; i += (DIMENSION + 1))
     {
-        allPoints.emplace_back(recvData[i], recvData[i + 1]);
+        PointMetadata pointMetadata;
+        for (int j = 0; j < DIMENSION; ++j)
+        {
+            pointMetadata.coordinates[j] = recvData[i + j];
+        }
+        pointMetadata.observation = recvData[i + DIMENSION];
+        allMetadata.push_back(pointMetadata);
     }
 }
 
-// Function to perform finer partitioning within each processor
-void finerPartition(const std::vector<std::pair<double, double>> &points, int numBlocksX, int numBlocksY, std::vector<std::vector<std::pair<double, double>>> &finerPartitions)
+// Function to perform finer partitioning within each processor (specific for 2D)
+void finerPartition(const std::vector<PointMetadata> &metadata, int numBlocksX, int numBlocksY, std::vector<std::vector<PointMetadata>> &finerPartitions)
 {
     finerPartitions.clear();
     finerPartitions.resize(numBlocksX * numBlocksY);
@@ -112,35 +125,36 @@ void finerPartition(const std::vector<std::pair<double, double>> &points, int nu
     double blockWidth = (xMax - xMin) / numBlocksX;
     double blockHeight = 1.0 / numBlocksY;
 
-    for (const auto &point : points)
+    for (const auto &pointmeta : metadata)
     {
-        int blockX = std::min(static_cast<int>((point.first - xMin) / blockWidth), numBlocksX - 1);
-        int blockY = std::min(static_cast<int>(point.second / blockHeight), numBlocksY - 1);
-        finerPartitions[blockY * numBlocksX + blockX].push_back(point);
+        int blockX = std::min(static_cast<int>((pointmeta.coordinates[0] - xMin) / blockWidth), numBlocksX - 1);
+        int blockY = std::min(static_cast<int>(pointmeta.coordinates[1] / blockHeight), numBlocksY - 1);
+        finerPartitions[blockY * numBlocksX + blockX].push_back(pointmeta);
     }
 }
 
-// Function to calculate centers of gravity for each block
-std::vector<std::pair<double, double>> calculateCentersOfGravity(const std::vector<std::vector<std::pair<double, double>>> &finerPartitions)
+// Function to calculate centers of gravity for each block (specific for 2D)
+std::vector<std::pair<double, double>> calculateCentersOfGravity(const std::vector<std::vector<PointMetadata>> &finerPartitions)
 {
     std::vector<std::pair<double, double>> centers;
-    centers.reserve(finerPartitions.size());
+    centers.resize(finerPartitions.size());
 
-    for (const auto &block : finerPartitions)
+    for (size_t i = 0; i < finerPartitions.size(); ++i)
     {
-        if (block.empty())
+        auto &blockmetadata = finerPartitions[i];
+        if (blockmetadata.empty())
         {
             continue;
         }
         double sumX = 0.0, sumY = 0.0;
-        for (const auto &point : block)
+        for (auto &pointmeta : blockmetadata)
         {
-            sumX += point.first;
-            sumY += point.second;
+            sumX += pointmeta.coordinates[0];
+            sumY += pointmeta.coordinates[1];
         }
-        double centerX = sumX / block.size();
-        double centerY = sumY / block.size();
-        centers.emplace_back(centerX, centerY);
+        double centerX = sumX / blockmetadata.size();
+        double centerY = sumY / blockmetadata.size();
+        centers[i] = std::make_pair(centerX, centerY);
     }
 
     return centers;
@@ -187,7 +201,7 @@ void sendCentersOfGravityToRoot(const std::vector<std::pair<double, double>> &ce
     if (rank == 0)
     {
         allCenters.clear();
-        allCenters.reserve(totalCenters);
+        allCenters.resize(totalCenters);
         for (int i = 0; i < totalCenters * 2; i += 2)
         {
             allCenters.emplace_back(recvBuffer[i], recvBuffer[i + 1]);
