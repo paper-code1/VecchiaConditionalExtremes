@@ -21,6 +21,7 @@ std::vector<PointMetadata> generateRandomPoints(int numPointsPerProcess)
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    // fix the random seed for each process
     std::srand(rank + 1);
 
     for (int i = 0; i < numPointsPerProcess; ++i)

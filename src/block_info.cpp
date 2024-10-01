@@ -3,6 +3,7 @@
 #include <mpi.h>
 #include <cmath>
 #include <iostream>
+#include "flops.h"
 
 // Function to create block information for each processor
 std::vector<BlockInfo> createBlockInfo(const std::vector<std::vector<PointMetadata>>& finerPartitions, 

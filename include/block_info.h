@@ -4,6 +4,7 @@
 #include <vector>
 #include <utility>
 #include <array>
+
 #define DIMENSION 2
 
 // Data structure to store block information

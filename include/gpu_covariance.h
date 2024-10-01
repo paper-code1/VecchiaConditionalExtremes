@@ -24,4 +24,21 @@ void covarianceMatern1_2_v1(const double* d_X1, const double* d_Y1, int ldx1, in
                          double* d_C, int ldc, int n, const std::vector<double> &theta,
                          cudaStream_t stream);
 
+
+__global__ void norm2_batch_kernel(
+    const int* d_lda, const double* const* d_A_array, 
+    const int* d_ldda, int batchCount, double* d_norm2_results);
+
+double norm2_batch(
+    const int* d_lda, const double* const* d_A_array, 
+    const int* d_ldda, int batchCount, cudaStream_t stream);
+
+__global__ void log_det_batch_kernel(
+    const int* d_lda, const double* const* d_A_array, 
+    const int* d_ldda, int batchCount, double* d_log_det_results);
+
+double log_det_batch(
+    const int* d_lda, const double* const* d_A_array, 
+    const int* d_ldda, int batchCount, cudaStream_t stream);
+
 #endif // GPU_COVARIANCE_H

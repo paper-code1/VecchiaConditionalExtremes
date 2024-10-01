@@ -1,7 +1,11 @@
+#ifndef INPUT_PARSER_H
+#define INPUT_PARSER_H
+
 #include <iostream>
 #include <string>
 #include <vector>
-
+#include <magma_v2.h>
+#include <cuda_runtime.h>
 #include "cxxopts.hpp"
 
 // Structure to store command line options
@@ -12,12 +16,21 @@ struct Opts
     int numBlocksY;
     int m; // the number of nearest neighbor
     bool print;
+    int gpu_id;
+    int seed;
     double distance_threshold;
     std::vector<double> theta;
+    cudaStream_t stream;
+    magma_queue_t queue;
 };
 
-bool parse_args(int argc, char **argv, Opts &opts)
+inline bool parse_args(int argc, char **argv, Opts &opts)
 {
+    int rank;
+    int size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
     cxxopts::Options options(argv[0], "Block Vecchia approximation");
     options.add_options()
     ("num_loc_per_process", "Number of locations for each processor", cxxopts::value<int>()->default_value("2000"))
@@ -26,6 +39,8 @@ bool parse_args(int argc, char **argv, Opts &opts)
     ("m", "Special rule for the first 100 blocks", cxxopts::value<int>()->default_value("30"))
     ("distance_threshold", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
     ("theta", "Parameters for the covariance function", cxxopts::value<std::vector<double>>()->default_value("1.0,0.1,0.5"))
+    ("gpu_id", "GPU ID", cxxopts::value<int>()->default_value("0"))
+    ("seed", "Seed for random number generator", cxxopts::value<int>()->default_value("0"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -53,5 +68,13 @@ bool parse_args(int argc, char **argv, Opts &opts)
     opts.m = result["m"].as<int>();
     opts.distance_threshold = result["distance_threshold"].as<double>();
     opts.theta = result["theta"].as<std::vector<double>>();
+    // gpu_id is used for personal server, hen/swan/..., each server has 2 GPUs
+    opts.gpu_id = (rank < 20) ? 0 : 1;
+    cudaSetDevice(opts.gpu_id);
+    magma_queue_create(opts.gpu_id, &opts.queue);
+    opts.stream = magma_queue_get_cuda_stream(opts.queue);
+    opts.seed = result["seed"].as<int>();
     return true;
 }
+
+#endif

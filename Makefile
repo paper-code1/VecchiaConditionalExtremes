@@ -10,7 +10,7 @@ CXX = mpic++
 NVCC=$(_CUDA_ROOT_)/bin/nvcc
 
 NVOPTS = -ccbin $(CXX) --compiler-options -fno-strict-aliasing
-CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare
+CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas
 
 ifdef _DEBUG_
   CXXFLAGS += -g -Xcompiler -rdynamic
@@ -66,12 +66,13 @@ LIB+= -lstdc++
 #---------------- make -------------------------
 
 TARGET = $(BIN_DIR)/generate_points
-OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o $(OBJ_DIR)/gpu_covariance.o
+OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o $(OBJ_DIR)/gpu_covariance.o $(OBJ_DIR)/vecchia_helper.o
 
 # Add input_parser.h as a dependency for all object files
 DEPS=
 DEPS+=include/input_parser.h
 DEPS+=include/gpu_covariance.h
+DEPS+=include/vecchia_helper.h
 
 all: $(TARGET)
 

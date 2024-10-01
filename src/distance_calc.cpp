@@ -183,7 +183,7 @@ void processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<
     }
 
     // Debug Save block information for visualization
-    if (rank == 1) { // Choose the processor you want to visualize, here 2 is used as an example
+    if (rank == 3) { // Choose the processor you want to visualize, here 2 is used as an example
         std::ofstream outfile("block_info.txt");
         if (outfile.is_open()) {
             for (const auto& block : blockInfos) {

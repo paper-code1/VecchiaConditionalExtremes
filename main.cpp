@@ -5,16 +5,19 @@
 #include <set>
 #include <chrono>
 #include <thread>
-#include "random_points.h"
-#include "block_info.h"
-#include "distance_calc.h"
-#include "gpu_operations.h"
+#include <magma_v2.h>
 #include "input_parser.h"
+#include "block_info.h"
+#include "random_points.h"
+#include "distance_calc.h"
 #include "gpu_covariance.h"
+#include "gpu_operations.h"
+#include "vecchia_helper.h"
 
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
+    magma_init();
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     int rank;
@@ -40,7 +43,10 @@ int main(int argc, char **argv)
 
     // 1. Generate random points
     std::vector<PointMetadata> localPoints = generateRandomPoints(opts.numPointsPerProcess);
+    MPI_Barrier(MPI_COMM_WORLD);
 
+    // time preprocessing
+    auto start_preprocessing = std::chrono::high_resolution_clock::now();
     // 2.1 Partition points and communicate them
     std::vector<PointMetadata> allPoints;
     partitionPoints(localPoints, allPoints);
@@ -75,15 +81,40 @@ int main(int argc, char **argv)
     // Process and send blocks based on distance threshold and special rule for the first 100 blocks
     processAndSendBlocks(blockInfos, allCenters, opts.m, opts.distance_threshold);
     MPI_Barrier(MPI_COMM_WORLD);
+    auto end_preprocessing = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
+
+    // find the maximum duration_preprocessing
+    double avg_duration_preprocessing;
+    double duration_preprocessing_seconds = duration_preprocessing.count();
+    MPI_Allreduce(&duration_preprocessing_seconds, &avg_duration_preprocessing, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_preprocessing /= size;
+    
     // 5. independent computation of log-likelihood
-    // Determine which GPU to use based on the rank
-    int gpu_id = (rank < 20) ? 0 : 1; // this is used for personal server, hen/swan/...
+    // 5. independent computation of log-likelihood
 
     // Step 1: Copy data to GPU
-    GpuData gpuData = copyDataToGPU(gpu_id, blockInfos);
-    
+    GpuData gpuData = copyDataToGPU(opts, blockInfos);
+
+    // // calculate the tota flops
+    double total_gflops = gflopsTotal(gpuData);
+
     // Step 2: Perform computation
-    performComputationOnGPU(gpuData, opts.theta);
+    // time the computation in seconds
+    auto start_computation = std::chrono::high_resolution_clock::now();
+    double log_likelihood = performComputationOnGPU(gpuData, opts.theta, opts);
+    MPI_Barrier(MPI_COMM_WORLD);
+    auto end_computation = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_computation = end_computation - start_computation;
+    double avg_duration_computation;
+    double duration_computation_seconds = duration_computation.count();
+    MPI_Allreduce(&duration_computation_seconds, &avg_duration_computation, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_computation /= size;
+
+    
+    // save the time and gflops to a file
+    MPI_Barrier(MPI_COMM_WORLD);
+    saveTimeAndGflops(avg_duration_preprocessing, avg_duration_computation, total_gflops, opts.numPointsPerProcess, opts.numBlocksX, opts.numBlocksY, opts.m, opts.seed);
 
     // Step 3: Cleanup GPU memory
     cleanupGpuMemory(gpuData);
