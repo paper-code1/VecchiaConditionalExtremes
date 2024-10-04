@@ -408,9 +408,9 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
 
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)
-    checkMagmaError(magma_dpotrf_vbatched_max_nocheck(MagmaLower, d_lda_locs_neighbors,
+    magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        dinfo_magma, batchCount, max_m, queue));
+                        dinfo_magma, batchCount, queue);
     // trsm
     magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
                         max_m, max_n1, 

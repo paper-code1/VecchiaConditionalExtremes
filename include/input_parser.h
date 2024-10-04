@@ -6,6 +6,7 @@
 #include <vector>
 #include <magma_v2.h>
 #include <cuda_runtime.h>
+#include <mpi.h>
 #include "cxxopts.hpp"
 
 // Structure to store command line options
@@ -69,7 +70,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.distance_threshold = result["distance_threshold"].as<double>();
     opts.theta = result["theta"].as<std::vector<double>>();
     // gpu_id is used for personal server, hen/swan/..., each server has 2 GPUs
-    opts.gpu_id = (rank < 20) ? 0 : 1;
+    opts.gpu_id = (rank < (size / 2)) ? 0 : 1;
     cudaSetDevice(opts.gpu_id);
     magma_queue_create(opts.gpu_id, &opts.queue);
     opts.stream = magma_queue_get_cuda_stream(opts.queue);

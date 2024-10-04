@@ -150,7 +150,7 @@ void processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<
     std::vector<BlockInfo> receivedBlocks = unpackBlockInfo(recvBuffer);
 
     // Reorder received blocks based on globalOrder
-    std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {
+    std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {      
         return a.globalOrder < b.globalOrder;
     });
 
@@ -182,26 +182,26 @@ void processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<
         }
     }
 
-    // Debug Save block information for visualization
-    if (rank == 3) { // Choose the processor you want to visualize, here 2 is used as an example
-        std::ofstream outfile("block_info.txt");
-        if (outfile.is_open()) {
-            for (const auto& block : blockInfos) {
-                outfile << "Block Global Order: " << block.globalOrder << "\n";
-                outfile << "Points and observations:\n";
-                for (int i = 0; i < block.points.size(); ++i) {
-                    outfile << "(" << block.points[i][0] << ", " << block.points[i][1] << ", " << block.observations_points[i] << ")\n";
-                }
-                outfile << "Block Center: (" << block.center.first << ", " << block.center.second << ")\n";
-                outfile << "Nearest Neighbors and observations:\n";
-                for (int i = 0; i < block.nearestNeighbors.size(); ++i) {
-                    outfile << "(" << block.nearestNeighbors[i][0] << ", " << block.nearestNeighbors[i][1] << ", " << block.observations_nearestNeighbors[i] << ")\n";
-                }
-                outfile << "\n";
-            }
-            outfile.close();
-        } else {
-            std::cerr << "Unable to open file for writing.\n";
-        }
-    }
+    // // Debug Save block information for visualization
+    // if (rank == 3) { // Choose the processor you want to visualize, here 2 is used as an example
+    //     std::ofstream outfile("block_info.txt");
+    //     if (outfile.is_open()) {
+    //         for (const auto& block : blockInfos) {
+    //             outfile << "Block Global Order: " << block.globalOrder << "\n";
+    //             outfile << "Points and observations:\n";
+    //             for (int i = 0; i < block.points.size(); ++i) {
+    //                 outfile << "(" << block.points[i][0] << ", " << block.points[i][1] << ", " << block.observations_points[i] << ")\n";
+    //             }
+    //             outfile << "Block Center: (" << block.center.first << ", " << block.center.second << ")\n";
+    //             outfile << "Nearest Neighbors and observations:\n";
+    //             for (int i = 0; i < block.nearestNeighbors.size(); ++i) {
+    //                 outfile << "(" << block.nearestNeighbors[i][0] << ", " << block.nearestNeighbors[i][1] << ", " << block.observations_nearestNeighbors[i] << ")\n";
+    //             }
+    //             outfile << "\n";
+    //         }
+    //         outfile.close();
+    //     } else {
+    //         std::cerr << "Unable to open file for writing.\n";
+    //     }
+    // }
 }

@@ -47,9 +47,20 @@ int main(int argc, char **argv)
 
     // time preprocessing
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
+    
     // 2.1 Partition points and communicate them
     std::vector<PointMetadata> allPoints;
     partitionPoints(localPoints, allPoints);
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    auto end_preprocessing = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
+    // find the maximum duration_preprocessing
+    double avg_duration_preprocessing;
+    double duration_preprocessing_seconds = duration_preprocessing.count();
+    MPI_Allreduce(&duration_preprocessing_seconds, &avg_duration_preprocessing, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_preprocessing /= size;
+
 
     // 2.2 Perform finer partitioning within each processor
     std::vector<std::vector<PointMetadata>> finerPartitions;
@@ -61,36 +72,36 @@ int main(int argc, char **argv)
     // 2.4 Send centers of gravity to processor 0
     std::vector<std::pair<double, double>> allCenters;
     sendCentersOfGravityToRoot(centers, allCenters, opts.print);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     // 3. Reorder centers at processor 0
     reorderCenters(allCenters);
-
+    MPI_Barrier(MPI_COMM_WORLD);
     // 3.1 Broadcast reordered centers to all processors
     int numCenters = allCenters.size();
     MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
     broadcastCenters(allCenters, allCenters, numCenters);
-
+    MPI_Barrier(MPI_COMM_WORLD);
     // 4. NN searching
     // 4.1 Create block information
     std::vector<BlockInfo> blockInfos = createBlockInfo(finerPartitions, centers, allCenters);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     // 4.2 Block sent info
     // // (if block is a candidiate for other blocks, and then
     // // send it to corresponding processors)
     // // Here, you could set the first 100 need to obtain all previous blocks
     // Process and send blocks based on distance threshold and special rule for the first 100 blocks
+    auto start_block_sending = std::chrono::high_resolution_clock::now();
     processAndSendBlocks(blockInfos, allCenters, opts.m, opts.distance_threshold);
     MPI_Barrier(MPI_COMM_WORLD);
-    auto end_preprocessing = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
-
-    // find the maximum duration_preprocessing
-    double avg_duration_preprocessing;
-    double duration_preprocessing_seconds = duration_preprocessing.count();
-    MPI_Allreduce(&duration_preprocessing_seconds, &avg_duration_preprocessing, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_preprocessing /= size;
+    auto end_block_sending = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_block_sending = end_block_sending - start_block_sending;
+    double avg_duration_block_sending;
+    double duration_block_sending_seconds = duration_block_sending.count();
+    MPI_Allreduce(&duration_block_sending_seconds, &avg_duration_block_sending, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_block_sending /= size;
     
-    // 5. independent computation of log-likelihood
     // 5. independent computation of log-likelihood
 
     // Step 1: Copy data to GPU
@@ -114,7 +125,9 @@ int main(int argc, char **argv)
     
     // save the time and gflops to a file
     MPI_Barrier(MPI_COMM_WORLD);
-    saveTimeAndGflops(avg_duration_preprocessing, avg_duration_computation, total_gflops, opts.numPointsPerProcess, opts.numBlocksX, opts.numBlocksY, opts.m, opts.seed);
+    if (rank == 0) {
+        saveTimeAndGflops(avg_duration_preprocessing, avg_duration_computation, avg_duration_block_sending, total_gflops, opts.numPointsPerProcess, opts.numBlocksX, opts.numBlocksY, opts.m, opts.seed);
+    }
 
     // Step 3: Cleanup GPU memory
     cleanupGpuMemory(gpuData);
