@@ -93,7 +93,7 @@ int main(int argc, char **argv)
     // // Here, you could set the first 100 need to obtain all previous blocks
     // Process and send blocks based on distance threshold and special rule for the first 100 blocks
     auto start_block_sending = std::chrono::high_resolution_clock::now();
-    processAndSendBlocks(blockInfos, allCenters, opts.m, opts.distance_threshold);
+    std::vector<BlockInfo> receivedBlocks = processAndSendBlocks(blockInfos, allCenters, opts.m, opts.distance_threshold);
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_block_sending = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_block_sending = end_block_sending - start_block_sending;
@@ -101,7 +101,12 @@ int main(int argc, char **argv)
     double duration_block_sending_seconds = duration_block_sending.count();
     MPI_Allreduce(&duration_block_sending_seconds, &avg_duration_block_sending, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     avg_duration_block_sending /= size;
-    
+
+    // 4.3 NN searching
+    nearest_neighbor_search(blockInfos, opts.m, receivedBlocks);
+    // free the memory of receivedBlocks
+    // receivedBlocks.clear();
+    MPI_Barrier(MPI_COMM_WORLD);
     // 5. independent computation of log-likelihood
 
     // Step 1: Copy data to GPU

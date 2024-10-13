@@ -66,7 +66,7 @@ std::vector<BlockInfo> unpackBlockInfo(const std::vector<double> &buffer)
     return blocks;
 }
 
-void processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::pair<double, double>> &allCenters, int m, double distance_threshold)
+std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::pair<double, double>> &allCenters, int m, double distance_threshold)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -149,8 +149,14 @@ void processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<
     // Unpack received data
     std::vector<BlockInfo> receivedBlocks = unpackBlockInfo(recvBuffer);
 
+    return receivedBlocks;
+}
+
+
+void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, int m, std::vector<BlockInfo> &receivedBlocks)
+{
     // Reorder received blocks based on globalOrder
-    std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {      
+    std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {
         return a.globalOrder < b.globalOrder;
     });
 

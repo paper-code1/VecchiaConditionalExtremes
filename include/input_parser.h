@@ -19,6 +19,7 @@ struct Opts
     bool print;
     int gpu_id;
     int seed;
+    int dim;
     double distance_threshold;
     std::vector<double> theta;
     cudaStream_t stream;
@@ -41,6 +42,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("distance_threshold", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
     ("theta", "Parameters for the covariance function", cxxopts::value<std::vector<double>>()->default_value("1.0,0.1,0.5"))
     ("gpu_id", "GPU ID", cxxopts::value<int>()->default_value("0"))
+    ("dim", "Dimension of the problem", cxxopts::value<int>()->default_value("2"))
     ("seed", "Seed for random number generator", cxxopts::value<int>()->default_value("0"))
     ("help", "Print usage");
 
@@ -75,6 +77,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     magma_queue_create(opts.gpu_id, &opts.queue);
     opts.stream = magma_queue_get_cuda_stream(opts.queue);
     opts.seed = result["seed"].as<int>();
+    opts.dim = result["dim"].as<int>();
     return true;
 }
 
