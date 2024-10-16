@@ -34,23 +34,45 @@ int main(int argc, char **argv)
 
     // Use the parsed options
     if (rank == 0 && opts.print) {
-        std::cout << "Number of points per process: " << opts.numPointsPerProcess << std::endl;
-        std::cout << "Number of blocks in X direction: " << opts.numBlocksX << std::endl;
-        std::cout << "Number of blocks in Y direction: " << opts.numBlocksY << std::endl;
-        std::cout << "M value: " << opts.m << std::endl;
-        std::cout << "Theta: " << opts.theta[0] << ", " << opts.theta[1] << ", " << opts.theta[2] << std::endl;
+        std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
+        std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
+        std::cout << "The number of nearest neighbors: " << opts.m << std::endl;
+        // print the varied size of theta
+        std::cout << "Theta: ";
+        for (auto theta : opts.theta) {
+            std::cout << theta << ", ";
+        }
+        std::cout << std::endl;
     }
 
     // 1. Generate random points
-    std::vector<PointMetadata> localPoints = generateRandomPoints(opts.numPointsPerProcess);
-    MPI_Barrier(MPI_COMM_WORLD);
+    std::vector<PointMetadata> localPoints;
+    if (opts.train_metadata_path != ""){
+        localPoints = readPointsConcurrently(opts.train_metadata_path, opts);
+    }
+    else{
+        localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
+    }
+
+    // // // print the localPoints
+    // if (rank == 0) {
+    //     // std::cout << "Local points: " << std::endl;
+    //     for (int i = 0; i < opts.numPointsPerProcess; ++i) {
+    //         std::cout << "\"(" ;
+    //         for (int j = 0; j < opts.dim; ++j) {
+    //             std::cout << localPoints[i].coordinates[j] << ", ";
+    //         }   
+    //         std::cout << localPoints[i].observation << ")\" ," << std::endl;
+    //     }
+    // }
+    // MPI_Barrier(MPI_COMM_WORLD);
 
     // time preprocessing
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
     
     // 2.1 Partition points and communicate them
-    std::vector<PointMetadata> allPoints;
-    partitionPoints(localPoints, allPoints);
+    std::vector<PointMetadata> localPoints_out_partitioned;
+    partitionPoints(localPoints, localPoints_out_partitioned, opts);
     MPI_Barrier(MPI_COMM_WORLD);
 
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
@@ -64,36 +86,32 @@ int main(int argc, char **argv)
 
     // 2.2 Perform finer partitioning within each processor
     std::vector<std::vector<PointMetadata>> finerPartitions;
-    finerPartition(allPoints, opts.numBlocksX, opts.numBlocksY, finerPartitions);
+    finerPartition(localPoints_out_partitioned, opts.numBlocksPerProcess, finerPartitions, opts);
 
     // 2.3 Calculate centers of gravity for each block
-    std::vector<std::pair<double, double>> centers = calculateCentersOfGravity(finerPartitions);
-
-    // 2.4 Send centers of gravity to processor 0
-    std::vector<std::pair<double, double>> allCenters;
-    sendCentersOfGravityToRoot(centers, allCenters, opts.print);
+    std::vector<std::vector<double>> centers = calculateCentersOfGravity(finerPartitions, opts);
     MPI_Barrier(MPI_COMM_WORLD);
+    // 2.4 Send centers of gravity to processor 0
+    std::vector<std::vector<double>> allCenters;
+    sendCentersOfGravityToRoot(centers, allCenters, opts);
 
     // 3. Reorder centers at processor 0
-    reorderCenters(allCenters);
+    reorderCenters(allCenters, opts);
     MPI_Barrier(MPI_COMM_WORLD);
     // 3.1 Broadcast reordered centers to all processors
     int numCenters = allCenters.size();
     MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    broadcastCenters(allCenters, allCenters, numCenters);
+    broadcastCenters(allCenters, numCenters, opts);
     MPI_Barrier(MPI_COMM_WORLD);
     // 4. NN searching
     // 4.1 Create block information
-    std::vector<BlockInfo> blockInfos = createBlockInfo(finerPartitions, centers, allCenters);
+    std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, opts);
     MPI_Barrier(MPI_COMM_WORLD);
 
-    // 4.2 Block sent info
-    // // (if block is a candidiate for other blocks, and then
-    // // send it to corresponding processors)
-    // // Here, you could set the first 100 need to obtain all previous blocks
-    // Process and send blocks based on distance threshold and special rule for the first 100 blocks
+    // 4.2 Block candidate preparation
+    // Here, you could set the first 100 need to obtain all previous blocks and set threshold
     auto start_block_sending = std::chrono::high_resolution_clock::now();
-    std::vector<BlockInfo> receivedBlocks = processAndSendBlocks(blockInfos, allCenters, opts.m, opts.distance_threshold);
+    std::vector<BlockInfo> receivedBlocks = processAndSendBlocks(localBlocks, allCenters, opts.m, opts.distance_threshold, opts);
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_block_sending = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_block_sending = end_block_sending - start_block_sending;
@@ -103,22 +121,26 @@ int main(int argc, char **argv)
     avg_duration_block_sending /= size;
 
     // 4.3 NN searching
-    nearest_neighbor_search(blockInfos, opts.m, receivedBlocks);
+    nearest_neighbor_search(localBlocks, receivedBlocks, opts);
     // free the memory of receivedBlocks
     // receivedBlocks.clear();
     MPI_Barrier(MPI_COMM_WORLD);
     // 5. independent computation of log-likelihood
-
+    
     // Step 1: Copy data to GPU
-    GpuData gpuData = copyDataToGPU(opts, blockInfos);
+    GpuData gpuData = copyDataToGPU(opts, localBlocks);
 
     // // calculate the tota flops
-    double total_gflops = gflopsTotal(gpuData);
+    double total_gflops = gflopsTotal(gpuData, opts);
 
     // Step 2: Perform computation
     // time the computation in seconds
     auto start_computation = std::chrono::high_resolution_clock::now();
     double log_likelihood = performComputationOnGPU(gpuData, opts.theta, opts);
+    // print the log_likelihood
+    if (rank == 0){
+        std::cout << "log_likelihood: " << log_likelihood << std::endl;
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_computation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_computation = end_computation - start_computation;
@@ -131,7 +153,7 @@ int main(int argc, char **argv)
     // save the time and gflops to a file
     MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
-        saveTimeAndGflops(avg_duration_preprocessing, avg_duration_computation, avg_duration_block_sending, total_gflops, opts.numPointsPerProcess, opts.numBlocksX, opts.numBlocksY, opts.m, opts.seed);
+        saveTimeAndGflops(avg_duration_preprocessing, avg_duration_computation, avg_duration_block_sending, total_gflops, opts.numPointsPerProcess, opts.numPointsPerProcess, opts.numBlocksTotal, opts.m, opts.seed);
     }
 
     // Step 3: Cleanup GPU memory

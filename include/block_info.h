@@ -3,35 +3,42 @@
 
 #include <vector>
 #include <utility>
-#include <array>
-
-#define DIMENSION 2
+#include "input_parser.h"
 
 // Data structure to store block information
 struct BlockInfo
 {
     int localOrder;
     int globalOrder;
-    std::pair<double, double> center;
-    std::vector<std::array<double, DIMENSION>> points;
-    std::vector<std::array<double, DIMENSION>> nearestNeighbors;
-    std::vector<double> observations_points;
+    std::vector<double> center;
+    std::vector<std::vector<double>> blocks;
+    std::vector<std::vector<double>> nearestNeighbors;
+    std::vector<double> observations_blocks;
     std::vector<double> observations_nearestNeighbors;
+
+    // Default constructor: the outer size is not defined initially
+    BlockInfo() = default;
+
+    // Method to add a new vector of a specified dimension size
+    void addVector(int dim_size) {
+       blocks.push_back(std::vector<double>(dim_size));  // Add a new dim-sized vector
+    }
 };
 
 // point info
 struct PointMetadata {
-    std::array<double, DIMENSION> coordinates;
+    std::vector<double> coordinates;
     double observation;
 };
 
 // Function to calculate the Euclidean distance between two points
-double calculateDistance(const std::pair<double, double>& point1, const std::pair<double, double>& point2);
+double calculateDistance(const std::vector<double>& point1, const std::vector<double>& point2);
 
 // Function to create block information for each processor
 std::vector<BlockInfo> createBlockInfo(
     const std::vector<std::vector<PointMetadata>> &finerPartitions,
-    const std::vector<std::pair<double, double>> &localCenters,
-    const std::vector<std::pair<double, double>> &allCenters);
+    const std::vector<std::vector<double>> &localCenters,
+    const std::vector<std::vector<double>> &allCenters,
+    const Opts& opts);
 
 #endif // BLOCK_INFO_H

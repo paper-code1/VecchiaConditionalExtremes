@@ -7,15 +7,17 @@
 
 // Function to create block information for each processor
 std::vector<BlockInfo> createBlockInfo(const std::vector<std::vector<PointMetadata>>& finerPartitions, 
-                                       const std::vector<std::pair<double, double>>& localCenters, 
-                                       const std::vector<std::pair<double, double>>& allCenters) {
+                                       const std::vector<std::vector<double>>& localCenters, 
+                                       const std::vector<std::vector<double>>& allCenters,
+                                       const Opts& opts) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     std::vector<BlockInfo> blockInfos;
-    blockInfos.resize(localCenters.size());
+    int numBlocksLocal = localCenters.size();
+    blockInfos.resize(numBlocksLocal);
 
-    for (size_t i = 0; i < localCenters.size(); ++i) {
+    for (int i = 0; i < numBlocksLocal; ++i) {
         const auto& localCenter = localCenters[i];
 
         // Find the global order of the current local center among the all centers
@@ -32,8 +34,8 @@ std::vector<BlockInfo> createBlockInfo(const std::vector<std::vector<PointMetada
         blockInfo.globalOrder = globalOrder;
         blockInfo.center = localCenter;
         for (const auto& pointMetadata : finerPartitions[i]) {
-            blockInfo.points.push_back(pointMetadata.coordinates);
-            blockInfo.observations_points.push_back(pointMetadata.observation);
+            blockInfo.blocks.push_back(pointMetadata.coordinates);
+            blockInfo.observations_blocks.push_back(pointMetadata.observation);
         }
 
         blockInfos[i] = blockInfo;
@@ -42,9 +44,12 @@ std::vector<BlockInfo> createBlockInfo(const std::vector<std::vector<PointMetada
     return blockInfos;
 }
 
-// Function to calculate distance between two points (only for 2D)
-double calculateDistance(const std::pair<double, double>& point1, const std::pair<double, double>& point2) {
-    double dx = point1.first - point2.first;
-    double dy = point1.second - point2.second;
-    return std::sqrt(dx * dx + dy * dy);
+// Function to calculate distance between two points (high dimensional)
+double calculateDistance(const std::vector<double>& point1, const std::vector<double>& point2) {
+    double dist = 0;
+    for (int i = 0; i < point1.size(); ++i) {
+        double dx = point1[i] - point2[i];
+        dist += dx * dx;
+    }
+    return std::sqrt(dist);
 }

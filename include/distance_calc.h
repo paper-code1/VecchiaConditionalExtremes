@@ -6,8 +6,8 @@
 #include "block_info.h"
 
 // Function to process and send blocks based on distance threshold and special rule for the first 100 blocks
-std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo>& blockInfos, const std::vector<std::pair<double, double>>& allCenters, int m, double distance_threshold);
+std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo>& blockInfos, const std::vector<std::vector<double>>& allCenters, int m, double distance_threshold, const Opts& opts);
 
-void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, int m, std::vector<BlockInfo> &receivedBlocks);
+void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<BlockInfo> &receivedBlocks, const Opts& opts);
 
 #endif // DISTANCE_CALC_H

@@ -13,10 +13,8 @@ struct GpuData
     // magma operations
     magma_int_t *dinfo_magma;
     // locations 
-    double **h_locs_x_array;
-    double **h_locs_y_array;
-    double **h_locs_neighbors_x_array;
-    double **h_locs_neighbors_y_array;
+    double **h_locs_array;
+    double **h_locs_neighbors_array;
     // observations
     double **h_observations_array;
     double **h_observations_neighbors_array;
@@ -48,14 +46,14 @@ struct GpuData
     int *d_const1;
     int total_observations_points_size; // bytes
     int total_observations_neighbors_size; // bytes
+    int total_locs_num_device; // number of points (including the padding)
+    int total_locs_neighbors_num_device; // number of nearest neighbors (including the padding)
     // contiguous memory for GPU points
     // double *d_locs_device;           // Contiguous memory for locations
     // double *d_locs_nearestNeighbors_device; // Contiguous memory for locations of nearest neighbors
     // only for 2D points (testing the coalesced memory access)
-    double *d_locs_x_device; // Contiguous memory for locations of x
-    double *d_locs_y_device; // Contiguous memory for locations of y
-    double *d_locs_neighbors_x_device; // Contiguous memory for locations of x
-    double *d_locs_neighbors_y_device; // Contiguous memory for locations of y
+    double *d_locs_device; // Contiguous memory for locations
+    double *d_locs_neighbors_device; // Contiguous memory for locations 
     double *d_observations_device;           // Contiguous memory for observations points
     double *d_observations_neighbors_device; // Contiguous memory for observations nearest neighbors
     double *d_cov_device;           // Contiguous memory for covariance matrix
@@ -67,10 +65,8 @@ struct GpuData
     double *d_cov_correction_device;
     
     // pointers for matrix and vectors 
-    double **d_locs_x_array;
-    double **d_locs_y_array;
-    double **d_locs_neighbors_x_array;
-    double **d_locs_neighbors_y_array;
+    double **d_locs_array;
+    double **d_locs_neighbors_array;
     double **d_observations_points_array;
     double **d_observations_neighbors_array;
     double **d_cov_array;
@@ -91,6 +87,6 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
 // Function to clean up GPU memory
 void cleanupGpuMemory(GpuData &gpuData);
 
-double gflopsTotal(const GpuData &gpuData);
+double gflopsTotal(const GpuData &gpuData, const Opts &opts);
 
 #endif // GPU_OPERATIONS_H

@@ -26,8 +26,9 @@ static void checkMagmaError(magma_int_t error) {
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
 GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
 {
-    int rank;
+    int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     // Set the GPU
     checkCudaError(cudaSetDevice(opts.gpu_id));
@@ -45,10 +46,8 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     gpuData.h_const1.resize(blockInfos.size() + 1);
 
     // Allocate arrays of pointers on the host
-    gpuData.h_locs_x_array = new double *[blockInfos.size()];
-    gpuData.h_locs_y_array = new double *[blockInfos.size()];
-    gpuData.h_locs_neighbors_x_array = new double *[blockInfos.size()];
-    gpuData.h_locs_neighbors_y_array = new double *[blockInfos.size()];
+    gpuData.h_locs_array = new double *[blockInfos.size() * opts.dim];
+    gpuData.h_locs_neighbors_array = new double *[blockInfos.size() * opts.dim];
     gpuData.h_observations_array = new double *[blockInfos.size()];
     gpuData.h_observations_neighbors_array = new double *[blockInfos.size()];
     gpuData.h_cov_array = new double *[blockInfos.size()];
@@ -60,10 +59,8 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     gpuData.h_cov_correction_array = new double *[blockInfos.size()];
 
     // array of pointers for the device
-    checkCudaError(cudaMalloc(&gpuData.d_locs_x_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_locs_y_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_x_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_y_array, blockInfos.size() * sizeof(double *)));
+    checkCudaError(cudaMalloc(&gpuData.d_locs_array, blockInfos.size() * opts.dim * sizeof(double *)));
+    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_array, blockInfos.size() * opts.dim * sizeof(double *)));
     checkCudaError(cudaMalloc(&gpuData.d_observations_points_array, blockInfos.size() * sizeof(double *)));
     checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_array, blockInfos.size() * sizeof(double *)));
     checkCudaError(cudaMalloc(&gpuData.d_cov_array, blockInfos.size() * sizeof(double *)));
@@ -74,58 +71,50 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     checkCudaError(cudaMalloc(&gpuData.d_mu_correction_array, blockInfos.size() * sizeof(double *)));
     checkCudaError(cudaMalloc(&gpuData.d_cov_correction_array, blockInfos.size() * sizeof(double *)));
 
-    // Calculate the total memory needed for points and nearest neighbors
+    // Calculate the total memory needed for blocks and nearest neighbors
     size_t total_observations_points_size = 0;
     size_t total_observations_nearestNeighbors_size = 0;
     size_t total_cov_size = 0;
     size_t total_cross_cov_size = 0;
     size_t total_conditioning_cov_size = 0;
-    size_t total_locs_x_size_host = 0;
-    size_t total_locs_y_size_host = 0;
-    size_t total_locs_nearestNeighbors_x_size_host = 0;
-    size_t total_locs_nearestNeighbors_y_size_host = 0;
-    size_t total_locs_x_size_device = 0;
-    size_t total_locs_y_size_device = 0;
-    size_t total_locs_nearestNeighbors_x_size_device = 0;
-    size_t total_locs_nearestNeighbors_y_size_device = 0;
+    size_t total_locs_size_host = 0;
+    size_t total_locs_nearestNeighbors_size_host = 0;
+    size_t total_locs_size_device = 0;
+    size_t total_locs_nearestNeighbors_size_device = 0;
 
     for (size_t i = 0; i < blockInfos.size(); ++i)
     {
         // number of clusters and their nearest neighbors
-        int m_points = blockInfos[i].points.size();
+        int m_blocks = blockInfos[i].blocks.size();
         int m_nearest_neighbor = blockInfos[i].nearestNeighbors.size();
         // 32 is the aligned 32 threads in a warp in GPU
-        gpuData.ldda_locs[i] = magma_roundup(m_points, 32); 
+        gpuData.ldda_locs[i] = magma_roundup(m_blocks, 32); 
         gpuData.ldda_neighbors[i] = magma_roundup(m_nearest_neighbor, 32); 
-        gpuData.lda_locs[i] = m_points;
+        gpuData.lda_locs[i] = m_blocks;
         gpuData.lda_locs_neighbors[i] = m_nearest_neighbor;
         gpuData.ldda_cov[i] = gpuData.ldda_locs[i];
         gpuData.ldda_cross_cov[i] = gpuData.ldda_neighbors[i];
         gpuData.ldda_conditioning_cov[i] = gpuData.ldda_neighbors[i];
         gpuData.h_const1[i] = 1;
         // total size of contiguous memory 
-        total_cov_size += gpuData.ldda_cov[i] * m_points * sizeof(double);
+        total_cov_size += gpuData.ldda_cov[i] * m_blocks * sizeof(double);
         total_conditioning_cov_size += gpuData.ldda_conditioning_cov[i] * m_nearest_neighbor * sizeof(double);
-        total_cross_cov_size += gpuData.ldda_conditioning_cov[i] * m_points * sizeof(double);
+        total_cross_cov_size += gpuData.ldda_conditioning_cov[i] * m_blocks * sizeof(double);
         total_observations_points_size += gpuData.ldda_locs[i] * sizeof(double);
         total_observations_nearestNeighbors_size += gpuData.ldda_neighbors[i] * sizeof(double);
-        total_locs_x_size_host += m_points * sizeof(double) ;
-        total_locs_y_size_host += m_points * sizeof(double);
-        total_locs_nearestNeighbors_x_size_host += m_nearest_neighbor * sizeof(double);
-        total_locs_nearestNeighbors_y_size_host += m_nearest_neighbor * sizeof(double);
-        total_locs_x_size_device += gpuData.ldda_locs[i] * sizeof(double);
-        total_locs_y_size_device += gpuData.ldda_locs[i] * sizeof(double);
-        total_locs_nearestNeighbors_x_size_device += gpuData.ldda_neighbors[i] * sizeof(double);
-        total_locs_nearestNeighbors_y_size_device += gpuData.ldda_neighbors[i] * sizeof(double);
+        total_locs_size_host += m_blocks * sizeof(double) * opts.dim;
+        total_locs_nearestNeighbors_size_host += m_nearest_neighbor * sizeof(double) * opts.dim;
+        total_locs_size_device += gpuData.ldda_locs[i] * sizeof(double) * opts.dim;
+        total_locs_nearestNeighbors_size_device += gpuData.ldda_neighbors[i] * sizeof(double) * opts.dim;
     }
 
     // Allocate contiguous memory on GPU
     gpuData.total_observations_points_size = total_observations_points_size;
     gpuData.total_observations_neighbors_size = total_observations_nearestNeighbors_size;
-    checkCudaError(cudaMalloc(&gpuData.d_locs_x_device, total_locs_x_size_device));
-    checkCudaError(cudaMalloc(&gpuData.d_locs_y_device, total_locs_y_size_device));
-    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_x_device, total_locs_nearestNeighbors_x_size_device));
-    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_y_device, total_locs_nearestNeighbors_y_size_device));
+    gpuData.total_locs_num_device = total_locs_size_device/sizeof(double)/opts.dim;
+    gpuData.total_locs_neighbors_num_device = total_locs_nearestNeighbors_size_device/sizeof(double)/opts.dim;
+    checkCudaError(cudaMalloc(&gpuData.d_locs_device, total_locs_size_device));
+    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_device, total_locs_nearestNeighbors_size_device));
     checkCudaError(cudaMalloc(&gpuData.d_observations_device, total_observations_points_size));
     checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_device, total_observations_nearestNeighbors_size));
     checkCudaError(cudaMalloc(&gpuData.d_cov_device, total_cov_size));
@@ -136,38 +125,42 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     checkCudaError(cudaMalloc(&gpuData.d_mu_correction_device, total_observations_points_size));
     checkCudaError(cudaMalloc(&gpuData.d_cov_correction_device, total_cov_size));
     
-    // Prepare to store points data for coalesced memory access
-    double *locs_x_data = new double[total_locs_x_size_host/sizeof(double)];
-    double *locs_y_data = new double[total_locs_y_size_host/sizeof(double)];
-    double *locs_nearestNeighbors_x_data = new double[total_locs_nearestNeighbors_x_size_host/sizeof(double)];
-    double *locs_nearestNeighbors_y_data = new double[total_locs_nearestNeighbors_y_size_host/sizeof(double)];
+    // Prepare to store blocks data for coalesced memory access
+    double *locs_blocks_data = new double[total_locs_size_host/sizeof(double)];
+    double *locs_nearestNeighbors_data = new double[total_locs_nearestNeighbors_size_host/sizeof(double)];
 
-    size_t locs_x_index = 0;
-    size_t locs_y_index = 0;
-    size_t locs_nearestNeighbors_x_index = 0;
-    size_t locs_nearestNeighbors_y_index = 0;
+    size_t locs_index = 0;
+    size_t locs_nearestNeighbors_index = 0;
+    size_t _total_locs_num_host = total_locs_size_host/sizeof(double)/opts.dim;
+    size_t _total_locs_nearestNeighbors_num_host = total_locs_nearestNeighbors_size_host/sizeof(double)/opts.dim;
+    size_t _total_locs_num_device = total_locs_size_device/sizeof(double)/opts.dim;
+    size_t _total_locs_nearestNeighbors_num_device = total_locs_nearestNeighbors_size_device/sizeof(double)/opts.dim;
     for (size_t i = 0; i < blockInfos.size(); ++i)
     {
-        int m_points = blockInfos[i].points.size();
+        int m_blocks = blockInfos[i].blocks.size();
         int m_nearest_neighbor = blockInfos[i].nearestNeighbors.size();
         // copy locations (coalesced memory access)
-        for (int j = 0; j < m_points; ++j)
+        for (int j = 0; j < m_blocks; ++j)
         {
-            locs_x_data[locs_x_index++] = blockInfos[i].points[j][0];
-            locs_y_data[locs_y_index++] = blockInfos[i].points[j][1];
+            for (int d = 0; d < opts.dim; ++d)
+            {
+                locs_blocks_data[locs_index + d * _total_locs_num_host] = blockInfos[i].blocks[j][d];
+            }
+            locs_index++;
         }
         for (int j = 0; j < m_nearest_neighbor; ++j)
         {
-            locs_nearestNeighbors_x_data[locs_nearestNeighbors_x_index++] = blockInfos[i].nearestNeighbors[j][0];
-            locs_nearestNeighbors_y_data[locs_nearestNeighbors_y_index++] = blockInfos[i].nearestNeighbors[j][1];
+            for (int d = 0; d < opts.dim; ++d)
+            {
+                locs_nearestNeighbors_data[locs_nearestNeighbors_index + d * _total_locs_nearestNeighbors_num_host] = blockInfos[i].nearestNeighbors[j][d];
+            }
+            locs_nearestNeighbors_index++;
         }
     }
 
     // Assign pointers to the beginning of each block's memory and copy data
-    double *locs_x_ptr = gpuData.d_locs_x_device;
-    double *locs_y_ptr = gpuData.d_locs_y_device;
-    double *locs_nearestNeighbors_x_ptr = gpuData.d_locs_neighbors_x_device;
-    double *locs_nearestNeighbors_y_ptr = gpuData.d_locs_neighbors_y_device;
+    double *locs_ptr = gpuData.d_locs_device;
+    double *locs_nearestNeighbors_ptr = gpuData.d_locs_neighbors_device;
     double *observations_points_ptr = gpuData.d_observations_device;
     double *observations_nearestNeighbors_ptr = gpuData.d_observations_neighbors_device;
     double *cov_ptr = gpuData.d_cov_device;
@@ -178,19 +171,21 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     double *mu_correction_ptr = gpuData.d_mu_correction_device;
     double *cov_correction_ptr = gpuData.d_cov_correction_device;
 
-    // calculate size 
-    size_t index_locs_x = 0;
-    size_t index_locs_y = 0;
-    size_t index_locs_nearestNeighbors_x = 0;
-    size_t index_locs_nearestNeighbors_y = 0;
-    for (size_t i = 0; i < blockInfos.size(); ++i)
-    {
-        int m_points = blockInfos[i].points.size();
+    // calculate size, and GPU pointers array
+    size_t index_locs = 0;
+    size_t index_locs_nearestNeighbors = 0;
+    size_t block_num = blockInfos.size();
+
+
+
+    for (size_t i = 0; i < block_num; ++i)
+    {   
+        int m_blocks = blockInfos[i].blocks.size();
         int m_nearest_neighbor = blockInfos[i].nearestNeighbors.size();
-        gpuData.h_locs_x_array[i] = locs_x_ptr;
-        gpuData.h_locs_y_array[i] = locs_y_ptr;
-        gpuData.h_locs_neighbors_x_array[i] = locs_nearestNeighbors_x_ptr;
-        gpuData.h_locs_neighbors_y_array[i] = locs_nearestNeighbors_y_ptr;
+        for (int d = 0; d < opts.dim; ++d){
+            gpuData.h_locs_array[i + block_num * d] = locs_ptr + block_num * d;
+            gpuData.h_locs_neighbors_array[i + block_num * d] = locs_nearestNeighbors_ptr + block_num * d;
+        }
         gpuData.h_observations_array[i] = observations_points_ptr;
         gpuData.h_observations_neighbors_array[i] = observations_nearestNeighbors_ptr;
         gpuData.h_cov_array[i] = cov_ptr;
@@ -202,8 +197,8 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
         gpuData.h_cov_correction_array[i] = cov_correction_ptr;
         // (observations)
         checkCudaError(cudaMemcpy(observations_points_ptr, 
-                                   blockInfos[i].observations_points.data(), 
-                                   blockInfos[i].observations_points.size() * sizeof(double), 
+                                   blockInfos[i].observations_blocks.data(), 
+                                   blockInfos[i].observations_blocks.size() * sizeof(double), 
                                    cudaMemcpyHostToDevice));
         checkCudaError(cudaMemcpy(observations_nearestNeighbors_ptr, 
                                    blockInfos[i].observations_nearestNeighbors.data(), 
@@ -211,61 +206,43 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
                                    cudaMemcpyHostToDevice));
         // copy the locations from the host to the device (locations + observations)
         // copy locations (coalesced memory access)
-        checkCudaError(cudaMemcpy(locs_x_ptr, 
-                                   locs_x_data + index_locs_x, 
-                                   m_points * sizeof(double), 
+        for (int d = 0; d < opts.dim; ++d){
+            checkCudaError(cudaMemcpy(locs_ptr + d * _total_locs_num_device, 
+                                   locs_blocks_data + index_locs + d * _total_locs_num_host, 
+                                   m_blocks * sizeof(double), 
                                    cudaMemcpyHostToDevice));
-        checkCudaError(cudaMemcpy(locs_y_ptr, 
-                                   locs_y_data + index_locs_y, 
-                                   m_points * sizeof(double), 
-                                   cudaMemcpyHostToDevice));
-        checkCudaError(cudaMemcpy(locs_nearestNeighbors_x_ptr, 
-                                   locs_nearestNeighbors_x_data + index_locs_nearestNeighbors_x, 
+            checkCudaError(cudaMemcpy(locs_nearestNeighbors_ptr + d * _total_locs_nearestNeighbors_num_device, 
+                                   locs_nearestNeighbors_data + index_locs_nearestNeighbors + d * _total_locs_nearestNeighbors_num_host, 
                                    m_nearest_neighbor * sizeof(double), 
                                    cudaMemcpyHostToDevice));
-        checkCudaError(cudaMemcpy(locs_nearestNeighbors_y_ptr, 
-                                   locs_nearestNeighbors_y_data + index_locs_nearestNeighbors_y, 
-                                   m_nearest_neighbor * sizeof(double), 
-                                   cudaMemcpyHostToDevice));
+        }
         // next pointer
-        locs_x_ptr += gpuData.ldda_locs[i];
-        locs_y_ptr += gpuData.ldda_locs[i];
-        locs_nearestNeighbors_x_ptr += gpuData.ldda_neighbors[i];
-        locs_nearestNeighbors_y_ptr += gpuData.ldda_neighbors[i];
+        locs_ptr += gpuData.ldda_locs[i];
+        locs_nearestNeighbors_ptr += gpuData.ldda_neighbors[i];
         observations_points_ptr += gpuData.ldda_locs[i];
         observations_nearestNeighbors_ptr += gpuData.ldda_neighbors[i];
-        cov_ptr += gpuData.ldda_cov[i] * m_points;
+        cov_ptr += gpuData.ldda_cov[i] * m_blocks;
         conditioning_cov_ptr += gpuData.ldda_conditioning_cov[i] * m_nearest_neighbor;
-        cross_cov_ptr += gpuData.ldda_conditioning_cov[i] * m_points;
+        cross_cov_ptr += gpuData.ldda_conditioning_cov[i] * m_blocks;
         // index update
-        index_locs_x += m_points;
-        index_locs_y += m_points;
-        index_locs_nearestNeighbors_x += m_nearest_neighbor;
-        index_locs_nearestNeighbors_y += m_nearest_neighbor;   
+        index_locs += m_blocks;
+        index_locs_nearestNeighbors += m_nearest_neighbor;
         // copy update
         observations_neighbors_copy_ptr += gpuData.ldda_neighbors[i];
         observations_copy_ptr += gpuData.ldda_locs[i];
         mu_correction_ptr += gpuData.ldda_locs[i];
-        cov_correction_ptr += gpuData.ldda_cov[i] * m_points;
+        cov_correction_ptr += gpuData.ldda_cov[i] * m_blocks;
     }
 
     // copy data array to the GPU
-    checkCudaError(cudaMemcpy(gpuData.d_locs_x_array, 
-               gpuData.h_locs_x_array, 
-               blockInfos.size() * sizeof(double *), 
+    checkCudaError(cudaMemcpy(gpuData.d_locs_array, 
+               gpuData.h_locs_array, 
+               blockInfos.size() * opts.dim * sizeof(double *), 
+               cudaMemcpyHostToDevice));   
+    checkCudaError(cudaMemcpy(gpuData.d_locs_neighbors_array, 
+               gpuData.h_locs_neighbors_array, 
+               blockInfos.size() * opts.dim * sizeof(double *), 
                cudaMemcpyHostToDevice));
-    checkCudaError(cudaMemcpy(gpuData.d_locs_y_array, 
-               gpuData.h_locs_y_array, 
-               blockInfos.size() * sizeof(double *), 
-               cudaMemcpyHostToDevice));    
-    checkCudaError(cudaMemcpy(gpuData.d_locs_neighbors_x_array, 
-               gpuData.h_locs_neighbors_x_array, 
-               blockInfos.size() * sizeof(double *), 
-               cudaMemcpyHostToDevice));
-    checkCudaError(cudaMemcpy(gpuData.d_locs_neighbors_y_array, 
-               gpuData.h_locs_neighbors_y_array, 
-               blockInfos.size() * sizeof(double *), 
-               cudaMemcpyHostToDevice));    
     checkCudaError(cudaMemcpy(gpuData.d_observations_points_array, 
                gpuData.h_observations_array, 
                blockInfos.size() * sizeof(double *), 
@@ -335,10 +312,8 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     magma_imax_size_2(gpuData.d_lda_locs_neighbors, gpuData.d_const1, batchCount, opts.queue);
     magma_getvector(1, sizeof(magma_int_t), &gpuData.d_const1[batchCount], 
                     1, &gpuData.max_n2, 1, opts.queue);
-    delete[] locs_x_data;
-    delete[] locs_y_data;
-    delete[] locs_nearestNeighbors_x_data;
-    delete[] locs_nearestNeighbors_y_data;
+    delete[] locs_blocks_data;
+    delete[] locs_nearestNeighbors_data;
 
     return gpuData;
 }
@@ -384,28 +359,28 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // take record of the time
     for (size_t i = 0; i < batchCount; ++i)
     {   
-        covarianceMatern1_2_v1(gpuData.h_locs_x_array[i], gpuData.h_locs_y_array[i], 
-                               gpuData.lda_locs[i], 1,
-                               gpuData.h_locs_x_array[i], gpuData.h_locs_y_array[i], 
-                               gpuData.lda_locs[i], 1,
-                               gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
-                               theta, stream);
-        covarianceMatern1_2_v1(gpuData.h_locs_neighbors_x_array[i], gpuData.h_locs_neighbors_y_array[i], 
-                               gpuData.lda_locs_neighbors[i], 1,
-                               gpuData.h_locs_x_array[i], gpuData.h_locs_y_array[i], 
-                               gpuData.lda_locs[i], 1,
-                               gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
-                               theta, stream);
-        covarianceMatern1_2_v1(gpuData.h_locs_neighbors_x_array[i], gpuData.h_locs_neighbors_y_array[i], 
-                               gpuData.lda_locs_neighbors[i], 1,
-                               gpuData.h_locs_neighbors_x_array[i], gpuData.h_locs_neighbors_y_array[i], 
-                               gpuData.lda_locs_neighbors[i], 1,
-                               gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
-                               theta, stream);
+        RBF_matcov(gpuData.h_locs_array[i],
+                    gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
+                    gpuData.h_locs_array[i],
+                    gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
+                    gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
+                    opts.dim, theta, stream);
+        RBF_matcov(gpuData.h_locs_neighbors_array[i], 
+                    gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
+                    gpuData.h_locs_array[i],
+                    gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
+                    gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
+                    opts.dim, theta, stream);
+        RBF_matcov(gpuData.h_locs_neighbors_array[i],
+                    gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
+                    gpuData.h_locs_neighbors_array[i], 
+                    gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
+                    gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
+                    opts.dim, theta, stream);
         // Synchronize to make sure the kernel has finished
         checkCudaError(cudaStreamSynchronize(stream));
     }    
-
+    
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)
     magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
@@ -462,11 +437,12 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
+    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
     checkMagmaError(magma_dpotrf_vbatched(
             MagmaLower, d_lda_locs,
             gpuData.d_cov_array, d_ldda_cov,
             dinfo_magma, batchCount, queue));
-
+// magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
     magmablas_dtrsm_vbatched(
         MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
         d_lda_locs, d_const1, 1.,
@@ -479,9 +455,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     double norm2_item = norm2_batch(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
     // determinant for all blocks
     double log_det_item = log_det_batch(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
-
     // sum for log-likelihood
-    double log_likelihood = -(
+    double log_likelihood = -0.5 *(
         log_det_item + norm2_item // the constant term is removed for simplicity
     );
     double log_likelihood_all = 0;
@@ -494,15 +469,9 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
 // Function to clean up GPU memory
 void cleanupGpuMemory(GpuData &gpuData)
 {
-    // cudaFree(gpuData.d_locs_device);
-    // cudaFree(gpuData.d_locs_nearestNeighbors_device);
     cudaFree(gpuData.d_cov_device);
     cudaFree(gpuData.d_conditioning_cov_device);
     cudaFree(gpuData.d_cross_cov_device);
-    cudaFree(gpuData.d_locs_x_device);
-    cudaFree(gpuData.d_locs_y_device);
-    cudaFree(gpuData.d_locs_neighbors_x_device);
-    cudaFree(gpuData.d_locs_neighbors_y_device);
     cudaFree(gpuData.d_observations_device);
     cudaFree(gpuData.d_observations_neighbors_device);
     cudaFree(gpuData.d_observations_neighbors_copy_device);
@@ -513,10 +482,8 @@ void cleanupGpuMemory(GpuData &gpuData)
     delete[] gpuData.h_cov_array;
     delete[] gpuData.h_conditioning_cov_array;
     delete[] gpuData.h_cross_cov_array;
-    delete[] gpuData.h_locs_x_array;
-    delete[] gpuData.h_locs_y_array;
-    delete[] gpuData.h_locs_neighbors_x_array;
-    delete[] gpuData.h_locs_neighbors_y_array;
+    delete[] gpuData.h_locs_array;
+    delete[] gpuData.h_locs_neighbors_array;
     delete[] gpuData.h_observations_array;
     delete[] gpuData.h_observations_neighbors_array;
     delete[] gpuData.h_observations_copy_array;
@@ -526,7 +493,7 @@ void cleanupGpuMemory(GpuData &gpuData)
 }
 
 // calculate the total flops
-double gflopsTotal(const GpuData &gpuData)
+double gflopsTotal(const GpuData &gpuData, const Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -535,7 +502,7 @@ double gflopsTotal(const GpuData &gpuData)
     for (size_t i = 0; i < batchCount; ++i)
     {
         // 1. matrix generation
-        gflops += (3 * 2 + 3) * (gpuData.lda_locs[i] * gpuData.lda_locs[i] + 
+        gflops += (3 * opts.dim + 3) * (gpuData.lda_locs[i] * gpuData.lda_locs[i] + 
                     gpuData.lda_locs_neighbors[i] * gpuData.lda_locs_neighbors[i] + 
                     gpuData.lda_locs[i] * gpuData.lda_locs_neighbors[i]) / 1e9;
         

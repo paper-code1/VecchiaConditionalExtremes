@@ -9,3 +9,5 @@ obj/
 *.pdf
 *.sh
 *.csv
+
+src/bv-mpi.code-workspace

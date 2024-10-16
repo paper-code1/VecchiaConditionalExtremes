@@ -16,17 +16,19 @@ void packBlockInfo(const std::vector<BlockInfo> &blocks, std::vector<double> &bu
     {
         buffer.push_back(static_cast<double>(block.localOrder));
         buffer.push_back(static_cast<double>(block.globalOrder));
-        buffer.push_back(block.center.first);
-        buffer.push_back(block.center.second);
-        buffer.push_back(static_cast<double>(block.points.size()));
-        for (const auto &point : block.points)
+        for (const auto &coord : block.center)
+        {
+            buffer.push_back(coord);
+        }
+        buffer.push_back(static_cast<double>(block.blocks.size()));
+        for (const auto &point : block.blocks)
         {
             for (const auto &coord : point)
             {
                 buffer.push_back(coord);
             }
         }
-        for (const auto &obs: block.observations_points)
+        for (const auto &obs: block.observations_blocks)
         {
             buffer.push_back(obs);
         }
@@ -34,39 +36,40 @@ void packBlockInfo(const std::vector<BlockInfo> &blocks, std::vector<double> &bu
 }
 
 // Function to unpack block information from buffers
-std::vector<BlockInfo> unpackBlockInfo(const std::vector<double> &buffer)
+std::vector<BlockInfo> unpackBlockInfo(const std::vector<double> &buffer, const Opts& opts)
 {
     std::vector<BlockInfo> blocks;
-    double x = 0.;
-    double y = 0.;
     size_t i = 0;
     while (i < buffer.size())
     {
         BlockInfo block;
         block.localOrder = static_cast<int>(buffer[i++]);
         block.globalOrder = static_cast<int>(buffer[i++]);
-        x = buffer[i++];
-        y = buffer[i++];
-        block.center = {x, y};
+        block.center.resize(opts.dim);
+        for (int j = 0; j < opts.dim; ++j)
+        {
+            block.center[j] = buffer[i++];
+        }
         int numPoints = static_cast<int>(buffer[i++]);
-        block.points.resize(numPoints);
-        block.observations_points.resize(numPoints);
+        block.blocks.resize(numPoints, std::vector<double>(opts.dim));
+        block.observations_blocks.resize(numPoints);
         for (int j = 0; j < numPoints; ++j)
         {
-            x = buffer[i++];
-            y = buffer[i++];
-            block.points[j] = {x, y};
+            for (int k = 0; k < opts.dim; ++k)
+            {
+                block.blocks[j][k] = buffer[i++];
+            }
         }
         for (int j = 0; j < numPoints; ++j)
         {
-            block.observations_points[j] = buffer[i++];
+            block.observations_blocks[j] = buffer[i++];
         }
         blocks.push_back(block);
     }
     return blocks;
 }
 
-std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::pair<double, double>> &allCenters, int m, double distance_threshold)
+std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::vector<double>> &allCenters, int m, double distance_threshold, const Opts& opts)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -101,7 +104,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             double distance = calculateDistance(blockInfo.center, allCenters[j]);
             if (distance < distance_threshold)
             {
-                int dest = std::min(static_cast<int>(allCenters[j].first * size), size - 1);
+                int dest = std::min(static_cast<int>(allCenters[j][0] * size), size - 1);
                 if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end())
                 {
                     sendBuffers[dest].push_back(blockInfo);
@@ -147,13 +150,13 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     MPI_Alltoallv(sendBuffer.data(), sendCounts.data(), sendDispls.data(), MPI_DOUBLE, recvBuffer.data(), recvCounts.data(), recvDispls.data(), MPI_DOUBLE, MPI_COMM_WORLD);
 
     // Unpack received data
-    std::vector<BlockInfo> receivedBlocks = unpackBlockInfo(recvBuffer);
+    std::vector<BlockInfo> receivedBlocks = unpackBlockInfo(recvBuffer, opts);
 
     return receivedBlocks;
 }
 
 
-void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, int m, std::vector<BlockInfo> &receivedBlocks)
+void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<BlockInfo> &receivedBlocks, const Opts& opts)
 {
     // Reorder received blocks based on globalOrder
     std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {
@@ -165,16 +168,15 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, int m, std::vec
     for (size_t i = 0; i < blockInfos.size(); ++i) {
         auto& block = blockInfos[i];
         // tuple: distance, point, observation
-        std::vector<std::tuple<double, std::array<double, DIMENSION>, double>> distancesMeta;
+        std::vector<std::tuple<double, std::vector<double>, double>> distancesMeta;
 
         for (auto& prevBlock: receivedBlocks) {
             if (prevBlock.globalOrder >= block.globalOrder){
                 break;
             }
-            for (int j = 0; j < prevBlock.points.size(); ++j) {
-                std::pair<double, double> point = {prevBlock.points[j][0], prevBlock.points[j][1]};
-                double distance = calculateDistance(block.center, point);
-                distancesMeta.emplace_back(distance, prevBlock.points[j], prevBlock.observations_points[j]);
+            for (size_t j = 0; j < prevBlock.blocks.size(); ++j) {
+                double distance = calculateDistance(block.center, prevBlock.blocks[j]);
+                distancesMeta.emplace_back(distance, prevBlock.blocks[j], prevBlock.observations_blocks[j]);
             }
         }
 
@@ -182,32 +184,9 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, int m, std::vec
         std::sort(distancesMeta.begin(), distancesMeta.end(), [](const auto& a, const auto& b) {
             return std::get<0>(a) < std::get<0>(b);
         });
-        for (auto k = 0; k < std::min(m, static_cast<int>(distancesMeta.size())); ++k) {
+        for (auto k = 0; k < std::min(opts.m, static_cast<int>(distancesMeta.size())); ++k) {
             block.nearestNeighbors.push_back(std::get<1>(distancesMeta[k]));
             block.observations_nearestNeighbors.push_back(std::get<2>(distancesMeta[k]));
         }
     }
-
-    // // Debug Save block information for visualization
-    // if (rank == 3) { // Choose the processor you want to visualize, here 2 is used as an example
-    //     std::ofstream outfile("block_info.txt");
-    //     if (outfile.is_open()) {
-    //         for (const auto& block : blockInfos) {
-    //             outfile << "Block Global Order: " << block.globalOrder << "\n";
-    //             outfile << "Points and observations:\n";
-    //             for (int i = 0; i < block.points.size(); ++i) {
-    //                 outfile << "(" << block.points[i][0] << ", " << block.points[i][1] << ", " << block.observations_points[i] << ")\n";
-    //             }
-    //             outfile << "Block Center: (" << block.center.first << ", " << block.center.second << ")\n";
-    //             outfile << "Nearest Neighbors and observations:\n";
-    //             for (int i = 0; i < block.nearestNeighbors.size(); ++i) {
-    //                 outfile << "(" << block.nearestNeighbors[i][0] << ", " << block.nearestNeighbors[i][1] << ", " << block.observations_nearestNeighbors[i] << ")\n";
-    //             }
-    //             outfile << "\n";
-    //         }
-    //         outfile.close();
-    //     } else {
-    //         std::cerr << "Unable to open file for writing.\n";
-    //     }
-    // }
 }
