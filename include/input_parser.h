@@ -16,13 +16,26 @@ struct Opts
     int numPointsTotal;
     int numBlocksPerProcess;
     int numBlocksTotal;
+    int numPointsPerProcess_test;
+    int numPointsTotal_test;
+    int numBlocksPerProcess_test;
+    int numBlocksTotal_test;
     int m; // the number of nearest neighbor
     bool print;
+    bool perf;
     int gpu_id;
     int seed;
     int dim;
     double distance_threshold;
+    // kmeans and optimization
     int kmeans_max_iter;
+    int current_iter;
+    int maxeval;
+    double xtol_rel;
+    std::vector<double> lower_bounds;
+    std::vector<double> upper_bounds;
+    std::vector<double> theta_init;
+
     std::string train_metadata_path;
     std::string test_metadata_path;
     std::vector<double> theta;
@@ -40,17 +53,27 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     cxxopts::Options options(argv[0], "Block Vecchia approximation");
     options.add_options()
     ("num_total_points", "Total number of points", cxxopts::value<int>()->default_value("20000"))
-    ("num_total_blocks", "Total number of blocks", cxxopts::value<int>()->default_value("100"))
+    ("num_total_blocks", "Total number of blocks", cxxopts::value<int>()->default_value("1000"))
     ("print", "Print additional information", cxxopts::value<bool>()->default_value("false"))
-    ("m", "Special rule for the first 100 blocks", cxxopts::value<int>()->default_value("30"))
+    ("m", "Special rule for the first 100 blocks", cxxopts::value<int>()->default_value("200"))
+    ("num_total_points_test", "Total number of points for testing", cxxopts::value<int>()->default_value("2000"))
+    ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<int>()->default_value("100"))
+    ("m_test", "Special rule for the first 100 blocks for testing", cxxopts::value<int>()->default_value("120"))
     ("distance_threshold", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
     ("theta", "Parameters for the covariance function", cxxopts::value<std::vector<double>>()->default_value("1.0,0.01,0.0001"))
+    ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("0.01,0.01,0.00001"))
+    ("upper_bounds", "Upper bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("3,3,0.1"))
+    ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>()->default_value("1.0,0.01,0.0001"))
     ("train_metadata_path", "Path to the training metadata file", cxxopts::value<std::string>()->default_value(""))
     ("test_metadata_path", "Path to the testing metadata file", cxxopts::value<std::string>()->default_value(""))
     ("gpu_id", "GPU ID", cxxopts::value<int>()->default_value("0"))
     ("dim", "Dimension of the problem", cxxopts::value<int>()->default_value("2"))
     ("seed", "Seed for random number generator", cxxopts::value<int>()->default_value("0"))
     ("kmeans_max_iter", "Maximum number of iterations for k-means++", cxxopts::value<int>()->default_value("30"))
+    ("current_iter", "Current iteration for optimization", cxxopts::value<int>()->default_value("0"))
+    ("perf", "Performance mode", cxxopts::value<bool>()->default_value("false"))
+    ("maxeval", "Maximum number of function evaluations", cxxopts::value<int>()->default_value("100"))
+    ("xtol_rel", "Relative tolerance for optimization", cxxopts::value<double>()->default_value("1e-5"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -65,10 +88,17 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.numPointsPerProcess = opts.numPointsTotal / size + (rank < opts.numPointsTotal % size);
     opts.numBlocksTotal = result["num_total_blocks"].as<int>();
     opts.numBlocksPerProcess = opts.numBlocksTotal / size + (rank < opts.numBlocksTotal % size);
+    opts.numPointsTotal_test = result["num_total_points_test"].as<int>();
+    opts.numPointsPerProcess_test = opts.numPointsTotal_test / size + (rank < opts.numPointsTotal_test % size);
+    opts.numBlocksTotal_test = result["num_total_blocks_test"].as<int>();
+    opts.numBlocksPerProcess_test = opts.numBlocksTotal_test / size + (rank < opts.numBlocksTotal_test % size);
     opts.print = result["print"].as<bool>();
     opts.m = result["m"].as<int>();
     opts.distance_threshold = result["distance_threshold"].as<double>();
     opts.theta = result["theta"].as<std::vector<double>>();
+    opts.lower_bounds = result["lower_bounds"].as<std::vector<double>>();
+    opts.upper_bounds = result["upper_bounds"].as<std::vector<double>>();
+    opts.theta_init = result["theta_init"].as<std::vector<double>>();
     // gpu_id is used for personal server, hen/swan/..., each server has 2 GPUs
     opts.gpu_id = (rank < (size / 2)) ? 0 : 1;
     cudaSetDevice(opts.gpu_id);
@@ -79,6 +109,10 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.kmeans_max_iter = result["kmeans_max_iter"].as<int>();
     opts.train_metadata_path = result["train_metadata_path"].as<std::string>();
     opts.test_metadata_path = result["test_metadata_path"].as<std::string>();
+    opts.perf = result["perf"].as<bool>();
+    opts.maxeval = result["maxeval"].as<int>();
+    opts.xtol_rel = result["xtol_rel"].as<double>();
+    opts.current_iter = result["current_iter"].as<int>();
     return true;
 }
 

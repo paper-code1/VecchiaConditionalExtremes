@@ -5,6 +5,7 @@
 #include <set>
 #include <chrono>
 #include <thread>
+#include <iomanip>
 #include <magma_v2.h>
 #include "input_parser.h"
 #include "block_info.h"
@@ -13,6 +14,40 @@
 #include "gpu_covariance.h"
 #include "gpu_operations.h"
 #include "vecchia_helper.h"
+#include <nlopt.hpp>
+
+struct OptimizationData {
+    GpuData* gpuData;
+    Opts* opts;
+    int rank;
+    MPI_Comm comm;
+};
+
+// Wrapper function for NLopt
+double objective_function(const std::vector<double> &x, std::vector<double> &grad, void *data) {
+    OptimizationData* opt_data = static_cast<OptimizationData*>(data);
+    GpuData* gpuData = opt_data->gpuData;
+    Opts* opts = opt_data->opts;
+    
+    // Broadcast theta values from rank 0 to all processes
+    MPI_Bcast(const_cast<double*>(x.data()), x.size(), MPI_DOUBLE, 0, opt_data->comm);
+    
+    // Negate the log-likelihood because NLopt minimizes by default
+    double result = -performComputationOnGPU(*gpuData, x, *opts);
+    
+    // Print optimization info
+    if (opt_data->rank == 0 && !opt_data->opts->perf) {
+        std::cout << "Optimization step: " << opts->current_iter++ << ", ";
+        std::cout << "f(theta): " << std::fixed << std::setprecision(6) << result << ", ";
+        std::cout << "Theta: ";
+        for (const auto& val : x) {
+            std::cout << std::fixed << std::setprecision(6) << val << " ";
+        }
+        std::cout << std::endl;
+    }
+    
+    return result;
+}
 
 int main(int argc, char **argv)
 {
@@ -37,6 +72,7 @@ int main(int argc, char **argv)
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "The number of nearest neighbors: " << opts.m << std::endl;
+        std::cout << "The distance threshold: " << opts.distance_threshold << std::endl;
         // print the varied size of theta
         std::cout << "Theta: ";
         for (auto theta : opts.theta) {
@@ -47,25 +83,15 @@ int main(int argc, char **argv)
 
     // 1. Generate random points
     std::vector<PointMetadata> localPoints;
+    std::vector<PointMetadata> localPoints_test;
     if (opts.train_metadata_path != ""){
         localPoints = readPointsConcurrently(opts.train_metadata_path, opts);
+        localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts);
     }
     else{
         localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
+        localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
     }
-
-    // // // print the localPoints
-    // if (rank == 0) {
-    //     // std::cout << "Local points: " << std::endl;
-    //     for (int i = 0; i < opts.numPointsPerProcess; ++i) {
-    //         std::cout << "\"(" ;
-    //         for (int j = 0; j < opts.dim; ++j) {
-    //             std::cout << localPoints[i].coordinates[j] << ", ";
-    //         }   
-    //         std::cout << localPoints[i].observation << ")\" ," << std::endl;
-    //     }
-    // }
-    // MPI_Barrier(MPI_COMM_WORLD);
 
     // time preprocessing
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
@@ -133,14 +159,50 @@ int main(int argc, char **argv)
     // // calculate the tota flops
     double total_gflops = gflopsTotal(gpuData, opts);
 
-    // Step 2: Perform computation
-    // time the computation in seconds
+    // Step 2: Perform computation with BOBYQA optimization
     auto start_computation = std::chrono::high_resolution_clock::now();
-    double log_likelihood = performComputationOnGPU(gpuData, opts.theta, opts);
-    // print the log_likelihood
-    if (rank == 0){
-        std::cout << "log_likelihood: " << log_likelihood << std::endl;
+
+    // Set up the optimization problem
+    nlopt::opt optimizer(nlopt::LN_BOBYQA, opts.theta.size());
+    
+    // Set bounds for theta (adjust these as needed)
+    optimizer.set_lower_bounds(opts.lower_bounds);
+    optimizer.set_upper_bounds(opts.upper_bounds);
+
+    // Set stopping criteria
+    optimizer.set_xtol_rel(opts.xtol_rel);
+    optimizer.set_maxeval(opts.maxeval);  // Maximum number of function evaluations
+
+    // Prepare the optimization data
+    OptimizationData opt_data = {&gpuData, &opts, rank, MPI_COMM_WORLD};
+
+    // Set the objective function
+    optimizer.set_min_objective(objective_function, &opt_data);
+
+    // Perform the optimization
+    std::vector<double> optimized_theta = opts.theta_init;  // Start with initial theta values
+    double optimized_log_likelihood;
+    
+    try {
+        nlopt::result result = optimizer.optimize(optimized_theta, optimized_log_likelihood);
+        if (rank == 0 && !opts.perf) {
+            std::cout << "Optimization result: " << result << std::endl;
+            std::cout << "Optimized log-likelihood: " << optimized_log_likelihood << std::endl;
+            std::cout << "Optimized theta values: ";
+            for (auto theta : optimized_theta) {
+            std::cout << theta << " ";
+            }
+            std::cout << std::endl;
+        }
+    } catch (std::exception &e) {
+        if (rank == 0 && !opts.perf) { 
+            std::cerr << "Optimization failed: " << e.what() << std::endl;
+        }
     }
+
+    // Broadcast the final optimized theta to all processes
+    MPI_Bcast(optimized_theta.data(), optimized_theta.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_computation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_computation = end_computation - start_computation;
