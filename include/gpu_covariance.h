@@ -33,4 +33,8 @@ double log_det_batch(
     const int* d_lda, const double* const* d_A_array, 
     const int* d_ldda, int batchCount, cudaStream_t stream);
 
+__global__ void generate_normal_kernel(double *data, int n, double mean, double stddev, unsigned long long seed);
+
+void generate_normal(double *data, int n, double mean, double stddev, unsigned long long seed, cudaStream_t stream);
+
 #endif // GPU_COVARIANCE_H

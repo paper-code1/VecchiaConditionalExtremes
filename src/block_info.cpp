@@ -6,6 +6,37 @@
 #include "flops.h"
 
 // Function to create block information for each processor
+std::vector<BlockInfo> createBlockInfo_test(const std::vector<std::vector<PointMetadata>>& finerPartitions, 
+                                       const std::vector<std::vector<double>>& localCenters, 
+                                       const Opts& opts) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    std::vector<BlockInfo> blockInfos;
+    int numBlocksLocal = localCenters.size();
+    blockInfos.resize(numBlocksLocal);
+
+    for (int i = 0; i < numBlocksLocal; ++i) {
+        const auto& localCenter = localCenters[i];
+
+        // Create BlockInfo structure
+        BlockInfo blockInfo;
+        blockInfo.localOrder = i;
+        blockInfo.globalOrder = std::numeric_limits<int>::max(); // maxint means prediction considering all blocks
+        blockInfo.center = localCenter;
+        for (const auto& pointMetadata : finerPartitions[i]) {
+            blockInfo.blocks.push_back(pointMetadata.coordinates);
+            blockInfo.observations_blocks.push_back(pointMetadata.observation);
+        }
+
+        blockInfos[i] = blockInfo;
+    }
+
+    return blockInfos;
+}
+
+
+// Function to create block information for each processor
 std::vector<BlockInfo> createBlockInfo(const std::vector<std::vector<PointMetadata>>& finerPartitions, 
                                        const std::vector<std::vector<double>>& localCenters, 
                                        const std::vector<std::vector<double>>& allCenters,

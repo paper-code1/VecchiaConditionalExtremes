@@ -4,24 +4,7 @@
 #include "gpu_operations.h"
 #include "gpu_covariance.h"
 #include "flops.h"
-
-// Updated function to check CUDA errors with file and line information
-#define checkCudaError(error) _checkCudaError(error, __FILE__, __LINE__)
-
-void _checkCudaError(cudaError_t error, const char* file, int line) {
-    if (error != cudaSuccess) {
-        std::cerr << "CUDA error in " << file << ":" << line 
-                  << ": " << cudaGetErrorString(error) << std::endl;
-        exit(EXIT_FAILURE);
-    }
-}
-
-static void checkMagmaError(magma_int_t error) {
-    if (error != MAGMA_SUCCESS) {
-        std::cerr << "MAGMA error: " << error << " at " << __FILE__ << ":" << __LINE__ << std::endl;
-        exit(EXIT_FAILURE);
-    }
-}
+#include "error_checking.h"
 
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
 GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)

@@ -21,8 +21,8 @@ struct Opts
     int numBlocksPerProcess_test;
     int numBlocksTotal_test;
     int m; // the number of nearest neighbor
+    int m_test; // the number of nearest neighbor for testing
     bool print;
-    bool perf;
     int gpu_id;
     int seed;
     int dim;
@@ -32,6 +32,8 @@ struct Opts
     int current_iter;
     int maxeval;
     double xtol_rel;
+    int num_simulations;
+    std::string mode;
     std::vector<double> lower_bounds;
     std::vector<double> upper_bounds;
     std::vector<double> theta_init;
@@ -71,9 +73,10 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("seed", "Seed for random number generator", cxxopts::value<int>()->default_value("0"))
     ("kmeans_max_iter", "Maximum number of iterations for k-means++", cxxopts::value<int>()->default_value("30"))
     ("current_iter", "Current iteration for optimization", cxxopts::value<int>()->default_value("0"))
-    ("perf", "Performance mode", cxxopts::value<bool>()->default_value("false"))
     ("maxeval", "Maximum number of function evaluations", cxxopts::value<int>()->default_value("100"))
     ("xtol_rel", "Relative tolerance for optimization", cxxopts::value<double>()->default_value("1e-5"))
+    ("mode", "Mode type (estimation or prediction or performance)", cxxopts::value<std::string>()->default_value("estimation"))
+    ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("10"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -94,6 +97,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.numBlocksPerProcess_test = opts.numBlocksTotal_test / size + (rank < opts.numBlocksTotal_test % size);
     opts.print = result["print"].as<bool>();
     opts.m = result["m"].as<int>();
+    opts.m_test = result["m_test"].as<int>();
     opts.distance_threshold = result["distance_threshold"].as<double>();
     opts.theta = result["theta"].as<std::vector<double>>();
     opts.lower_bounds = result["lower_bounds"].as<std::vector<double>>();
@@ -109,10 +113,15 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.kmeans_max_iter = result["kmeans_max_iter"].as<int>();
     opts.train_metadata_path = result["train_metadata_path"].as<std::string>();
     opts.test_metadata_path = result["test_metadata_path"].as<std::string>();
-    opts.perf = result["perf"].as<bool>();
     opts.maxeval = result["maxeval"].as<int>();
     opts.xtol_rel = result["xtol_rel"].as<double>();
     opts.current_iter = result["current_iter"].as<int>();
+    opts.mode = result["mode"].as<std::string>();
+    if (opts.mode == "performance"){
+        opts.print = true;
+        opts.maxeval = 1;
+    }
+    opts.num_simulations = result["num_simulations"].as<int>();
     return true;
 }
 

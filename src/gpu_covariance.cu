@@ -1,5 +1,6 @@
 #include <cmath>
 #include <iostream>
+#include <curand_kernel.h>
 #include "gpu_covariance.h"
 #include "block_info.h"
 #include <thrust/reduce.h>
@@ -188,4 +189,24 @@ double log_det_batch(const int* d_lda, const double* const* d_A_array, const int
     cudaFree(d_log_det_results);
 
     return total_log_det;
+}
+
+__global__ void generate_normal_kernel(double *data, int n, double mean, double stddev, unsigned long long seed) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Initialize cuRAND state
+    curandState state;
+    curand_init(seed, idx, 0, &state);
+
+    // Generate normally distributed random numbers
+    if (idx < n) {
+        data[idx] = curand_normal(&state) * stddev + mean;  // Apply mean and stddev
+    }
+}
+
+void generate_normal(double *data, int n, double mean, double stddev, unsigned long long seed, cudaStream_t stream) {
+    // Launch kernel
+    dim3 blockDim(THREADS_PER_BLOCK);
+    dim3 gridDim((n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
+    generate_normal_kernel<<<gridDim, blockDim, 0, stream>>>(data, n, mean, stddev, seed);
 }

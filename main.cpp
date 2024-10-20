@@ -14,6 +14,7 @@
 #include "gpu_covariance.h"
 #include "gpu_operations.h"
 #include "vecchia_helper.h"
+#include "prediction.h"
 #include <nlopt.hpp>
 
 struct OptimizationData {
@@ -36,7 +37,7 @@ double objective_function(const std::vector<double> &x, std::vector<double> &gra
     double result = -performComputationOnGPU(*gpuData, x, *opts);
     
     // Print optimization info
-    if (opt_data->rank == 0 && !opt_data->opts->perf) {
+    if (opt_data->rank == 0 && opts->mode != "performance") {
         std::cout << "Optimization step: " << opts->current_iter++ << ", ";
         std::cout << "f(theta): " << std::fixed << std::setprecision(6) << result << ", ";
         std::cout << "Theta: ";
@@ -86,11 +87,15 @@ int main(int argc, char **argv)
     std::vector<PointMetadata> localPoints_test;
     if (opts.train_metadata_path != ""){
         localPoints = readPointsConcurrently(opts.train_metadata_path, opts);
-        localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts);
+        if (opts.mode == "prediction"){
+            localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts);
+        }
     }
     else{
         localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
-        localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
+        if (opts.mode == "prediction"){
+            localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
+        }
     }
 
     // time preprocessing
@@ -100,6 +105,10 @@ int main(int argc, char **argv)
     std::vector<PointMetadata> localPoints_out_partitioned;
     partitionPoints(localPoints, localPoints_out_partitioned, opts);
     MPI_Barrier(MPI_COMM_WORLD);
+    std::vector<PointMetadata> localPoints_out_partitioned_test;
+    if (opts.mode == "prediction"){
+        partitionPoints(localPoints_test, localPoints_out_partitioned_test, opts);
+    }
 
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
@@ -112,10 +121,18 @@ int main(int argc, char **argv)
 
     // 2.2 Perform finer partitioning within each processor
     std::vector<std::vector<PointMetadata>> finerPartitions;
+    std::vector<std::vector<PointMetadata>> finerPartitions_test;
     finerPartition(localPoints_out_partitioned, opts.numBlocksPerProcess, finerPartitions, opts);
+    if (opts.mode == "prediction"){
+        finerPartition(localPoints_out_partitioned_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts);
+    }
 
     // 2.3 Calculate centers of gravity for each block
     std::vector<std::vector<double>> centers = calculateCentersOfGravity(finerPartitions, opts);
+    std::vector<std::vector<double>> centers_test;
+    if (opts.mode == "prediction"){
+        centers_test = calculateCentersOfGravity(finerPartitions_test, opts);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     // 2.4 Send centers of gravity to processor 0
     std::vector<std::vector<double>> allCenters;
@@ -132,6 +149,10 @@ int main(int argc, char **argv)
     // 4. NN searching
     // 4.1 Create block information
     std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, opts);
+    std::vector<BlockInfo> localBlocks_test;
+    if (opts.mode == "prediction"){
+        localBlocks_test = createBlockInfo_test(finerPartitions_test, centers_test, opts);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
 
     // 4.2 Block candidate preparation
@@ -148,8 +169,12 @@ int main(int argc, char **argv)
 
     // 4.3 NN searching
     nearest_neighbor_search(localBlocks, receivedBlocks, opts);
+    if (opts.mode == "prediction"){
+        nearest_neighbor_search(localBlocks_test, receivedBlocks, opts);
+    }
+
     // free the memory of receivedBlocks
-    // receivedBlocks.clear();
+    receivedBlocks.clear();
     MPI_Barrier(MPI_COMM_WORLD);
     // 5. independent computation of log-likelihood
     
@@ -185,7 +210,7 @@ int main(int argc, char **argv)
     
     try {
         nlopt::result result = optimizer.optimize(optimized_theta, optimized_log_likelihood);
-        if (rank == 0 && !opts.perf) {
+        if (rank == 0 && opts.mode != "performance") {
             std::cout << "Optimization result: " << result << std::endl;
             std::cout << "Optimized log-likelihood: " << optimized_log_likelihood << std::endl;
             std::cout << "Optimized theta values: ";
@@ -195,7 +220,7 @@ int main(int argc, char **argv)
             std::cout << std::endl;
         }
     } catch (std::exception &e) {
-        if (rank == 0 && !opts.perf) { 
+        if (rank == 0 && opts.mode != "performance") { 
             std::cerr << "Optimization failed: " << e.what() << std::endl;
         }
     }
@@ -211,15 +236,22 @@ int main(int argc, char **argv)
     MPI_Allreduce(&duration_computation_seconds, &avg_duration_computation, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     avg_duration_computation /= size;
 
+    // Step 3: Cleanup GPU memory
+    cleanupGpuMemory(gpuData);
+
+    // do the prediction for the test points
+    GpuData gpuData_test;
+    if (opts.mode == "prediction"){
+        gpuData_test = copyDataToGPU(opts, localBlocks_test);
+        performPredictionOnGPU(gpuData_test, optimized_theta, opts);
+        cleanupGpuMemory(gpuData_test);
+    }
     
     // save the time and gflops to a file
     MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
         saveTimeAndGflops(avg_duration_preprocessing, avg_duration_computation, avg_duration_block_sending, total_gflops, opts.numPointsPerProcess, opts.numPointsPerProcess, opts.numBlocksTotal, opts.m, opts.seed);
     }
-
-    // Step 3: Cleanup GPU memory
-    cleanupGpuMemory(gpuData);
     
     MPI_Finalize();
     return EXIT_SUCCESS;

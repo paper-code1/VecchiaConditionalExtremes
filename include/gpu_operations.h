@@ -83,7 +83,6 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
 
 // Function to perform computation on the GPU
 double performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts);
-
 // Function to clean up GPU memory
 void cleanupGpuMemory(GpuData &gpuData);
 

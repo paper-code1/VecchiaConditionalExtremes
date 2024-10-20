@@ -162,6 +162,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
     std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {
         return a.globalOrder < b.globalOrder;
     });
+    int m_nn = (opts.mode == "prediction") ? opts.m_test : opts.m;
 
     // Perform nearest neighbor search
     #pragma omp parallel for
@@ -184,7 +185,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
         std::sort(distancesMeta.begin(), distancesMeta.end(), [](const auto& a, const auto& b) {
             return std::get<0>(a) < std::get<0>(b);
         });
-        for (auto k = 0; k < std::min(opts.m, static_cast<int>(distancesMeta.size())); ++k) {
+        for (auto k = 0; k < std::min(m_nn, static_cast<int>(distancesMeta.size())); ++k) {
             block.nearestNeighbors.push_back(std::get<1>(distancesMeta[k]));
             block.observations_nearestNeighbors.push_back(std::get<2>(distancesMeta[k]));
         }
