@@ -5,6 +5,7 @@
 #include "gpu_covariance.h"
 #include "flops.h"
 #include "error_checking.h"
+#include "magma_dprint_gpu.h"
 
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
 GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
@@ -347,22 +348,23 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
-                    opts.dim, theta, stream);
+                    opts.dim, theta, true, stream);
         RBF_matcov(gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
-                    opts.dim, theta, stream);
+                    opts.dim, theta, false, stream);
         RBF_matcov(gpuData.h_locs_neighbors_array[i],
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
-                    opts.dim, theta, stream);
+                    opts.dim, theta, true, stream);
         // Synchronize to make sure the kernel has finished
         checkCudaError(cudaStreamSynchronize(stream));
     }    
+    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
     
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)
@@ -370,6 +372,7 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         dinfo_magma, batchCount, queue);
     // trsm
+    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
     magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
                         max_m, max_n1, 
                         d_lda_locs_neighbors, d_lda_locs,
@@ -401,6 +404,7 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                              batchCount, 
                              max_n1, max_n2, max_m,
                              queue);
+    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
     checkCudaError(cudaStreamSynchronize(stream));
     // 2.2 compute the conditional mean and variance
     for (size_t i = 0; i < batchCount; ++i){
@@ -416,6 +420,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                         gpuData.h_mu_correction_array[i], gpuData.ldda_locs[i], 
                         gpuData.h_observations_copy_array[i], gpuData.ldda_locs[i],
                         queue);
+        // print h_mu_correction_array[i]
+        // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_mu_correction_array[i], gpuData.ldda_locs[i], queue);
     }
     checkCudaError(cudaStreamSynchronize(stream));
 
@@ -442,6 +448,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     double log_likelihood = -0.5 *(
         log_det_item + norm2_item // the constant term is removed for simplicity
     );
+    //print log_det_item and norm2_item
+    // std::cout << "log_det_item: " << log_det_item << ", norm2_item: " << norm2_item << std::endl;
     double log_likelihood_all = 0;
     // mpi sum for log-likelihood
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);

@@ -8,6 +8,8 @@
 #include <random>
 #include <limits>
 #include <omp.h>
+#include <fstream>  // Add this line
+#include <sstream>  // Add this line for std::istringstream
 #include "random_points.h"
 
 // Define custom reduction for 2D vector
@@ -364,66 +366,55 @@ std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int 
     return clusters;
 }
 
-// Add this function to read points concurrently
+// Function to read points concurrently, with each processor reading a specific chunk of rows
 std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, const Opts& opts) {
-    MPI_File fh;
-    MPI_Status status;
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    int numPointsTotal = opts.numPointsTotal;
+
+    // Calculate the number of rows each process should read
+    int rows_per_process = numPointsTotal / size;
+    int remainder = numPointsTotal % size;
+
+    // Calculate the start and end rows for this process
+    int start_row = rank * rows_per_process + std::min(rank, remainder);
+    int end_row = start_row + rows_per_process + (rank < remainder ? 1 : 0);
+
     // Open the file
-    MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
-
-    // Get the file size
-    MPI_Offset filesize;
-    MPI_File_get_size(fh, &filesize);
-
-    // Calculate the chunk size and offset for each process
-    MPI_Offset chunk_size = filesize / size;
-    MPI_Offset offset = rank * chunk_size;
-
-    // Adjust the last process to read any remaining bytes
-    if (rank == size - 1) {
-        chunk_size = filesize - offset;
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Unable to open file " << filename << std::endl;
+        return {};
     }
 
-    // Allocate buffer and read the chunk
-    std::vector<char> buffer(chunk_size);
-    MPI_File_read_at(fh, offset, buffer.data(), chunk_size, MPI_CHAR, &status);
-
-    // Close the file
-    MPI_File_close(&fh);
-
-    // Process the buffer to extract PointMetadata
-    std::vector<PointMetadata> points;
-    std::istringstream iss(std::string(buffer.begin(), buffer.end()));
+    // Skip to the start row for this process
     std::string line;
+    for (int i = 0; i < start_row; ++i) {
+        std::getline(file, line);
+    }
 
-    while (std::getline(iss, line)) {
-        // Skip partial lines at the beginning and end of the chunk
-        if ((rank > 0 && iss.tellg() == 0) || 
-            (rank < size - 1 && iss.eof() && !line.empty())) {
-            continue;
-        }
-
+    // Read the assigned chunk of rows
+    std::vector<PointMetadata> points;
+    for (int i = start_row; i < end_row && std::getline(file, line); ++i) {
         std::istringstream lineStream(line);
         PointMetadata point;
         point.coordinates.resize(opts.dim);
         std::string value;
 
         // Read coordinates
-        for (int i = 0; i < opts.dim; ++i) {
+        for (int j = 0; j < opts.dim; ++j) {
             if (!std::getline(lineStream, value, ',')) {
-                std::cerr << "Error: Invalid data format in file" << std::endl;
+                std::cerr << "Error: Invalid data format in file at row " << i << std::endl;
                 continue;
             }
-            point.coordinates[i] = std::stod(value);
+            point.coordinates[j] = std::stod(value);
         }
 
         // Read observation (last column)
         if (!std::getline(lineStream, value)) {
-            std::cerr << "Error: Invalid data format in file" << std::endl;
+            std::cerr << "Error: Invalid data format in file at row " << i << std::endl;
             continue;
         }
         point.observation = std::stod(value);
@@ -431,5 +422,6 @@ std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, c
         points.push_back(point);
     }
 
+    file.close();
     return points;
 }

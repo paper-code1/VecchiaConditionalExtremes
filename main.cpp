@@ -39,7 +39,7 @@ double objective_function(const std::vector<double> &x, std::vector<double> &gra
     // Print optimization info
     if (opt_data->rank == 0 && opts->mode != "performance") {
         std::cout << "Optimization step: " << opts->current_iter++ << ", ";
-        std::cout << "f(theta): " << std::fixed << std::setprecision(6) << result << ", ";
+        std::cout << "f(theta): " << std::fixed << std::setprecision(6) << -result << ", ";
         std::cout << "Theta: ";
         for (const auto& val : x) {
             std::cout << std::fixed << std::setprecision(6) << val << " ";
@@ -69,10 +69,17 @@ int main(int argc, char **argv)
     }
 
     // Use the parsed options
-    if (rank == 0 && opts.print) {
+    if (rank == 0) {
+        std::cout << "----------------------------------------" << std::endl;
+        std::cout << "Mode: " << opts.mode << std::endl;
+        std::cout << "train_metadata_path: " << opts.train_metadata_path << std::endl;
+        std::cout << "test_metadata_path: " << opts.test_metadata_path << std::endl;
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
+        std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;
+        std::cout << "Number of total blocks_test: " << opts.numBlocksTotal_test << std::endl;
         std::cout << "The number of nearest neighbors: " << opts.m << std::endl;
+        std::cout << "The number of nearest neighbors_test: " << opts.m_test << std::endl;
         std::cout << "The distance threshold: " << opts.distance_threshold << std::endl;
         // print the varied size of theta
         std::cout << "Theta: ";
@@ -80,6 +87,7 @@ int main(int argc, char **argv)
             std::cout << theta << ", ";
         }
         std::cout << std::endl;
+        std::cout << "----------------------------------------" << std::endl;
     }
 
     // 1. Generate random points
@@ -97,7 +105,6 @@ int main(int argc, char **argv)
             localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
         }
     }
-
     // time preprocessing
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
     
@@ -168,13 +175,13 @@ int main(int argc, char **argv)
     avg_duration_block_sending /= size;
 
     // 4.3 NN searching
-    nearest_neighbor_search(localBlocks, receivedBlocks, opts);
+    nearest_neighbor_search(localBlocks, receivedBlocks, opts, false);
     if (opts.mode == "prediction"){
-        nearest_neighbor_search(localBlocks_test, receivedBlocks, opts);
+        nearest_neighbor_search(localBlocks_test, receivedBlocks, opts, true);
     }
 
     // free the memory of receivedBlocks
-    receivedBlocks.clear();
+    // receivedBlocks.clear();
     MPI_Barrier(MPI_COMM_WORLD);
     // 5. independent computation of log-likelihood
     
@@ -211,8 +218,8 @@ int main(int argc, char **argv)
     try {
         nlopt::result result = optimizer.optimize(optimized_theta, optimized_log_likelihood);
         if (rank == 0 && opts.mode != "performance") {
-            std::cout << "Optimization result: " << result << std::endl;
-            std::cout << "Optimized log-likelihood: " << optimized_log_likelihood << std::endl;
+            std::cout << "Optimization result tag: " << result << std::endl;
+            std::cout << "Optimized log-likelihood: " << -optimized_log_likelihood << std::endl;
             std::cout << "Optimized theta values: ";
             for (auto theta : optimized_theta) {
             std::cout << theta << " ";

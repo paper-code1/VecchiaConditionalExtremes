@@ -156,13 +156,13 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
 }
 
 
-void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<BlockInfo> &receivedBlocks, const Opts& opts)
+void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<BlockInfo> &receivedBlocks, const Opts& opts, bool pred_tag)
 {
     // Reorder received blocks based on globalOrder
     std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {
         return a.globalOrder < b.globalOrder;
     });
-    int m_nn = (opts.mode == "prediction") ? opts.m_test : opts.m;
+    int m_nn = (pred_tag) ? opts.m_test : opts.m;
 
     // Perform nearest neighbor search
     #pragma omp parallel for

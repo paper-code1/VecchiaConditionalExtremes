@@ -13,7 +13,7 @@
 // (coalesced memory access)
 __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
-                                          double* C, int ldc, int n, int dim, double sigma2, double range, double nugget) {
+                                          double* C, int ldc, int n, int dim, double sigma2, double range, double nugget, bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -27,19 +27,19 @@ __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int str
         C[i + j * ldc] = sigma2 * exp( - sqrt(dist_sqaure) / range );
     }
     // add nugget
-    if (i == j && i < ldx1 && j < ldx2) {
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
         C[i + j * ldc] += nugget;
     }
 }
 
 void RBF_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                 const double* d_X2, int ldx2, int incx2, int stridex2,
-                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta, bool nugget_tag,
                 cudaStream_t stream) {
     // Launch kernel
     dim3 blockDim(16, 16);
     dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
-    RBF_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], theta[2]);
+    RBF_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], theta[2], nugget_tag);
 }
 
 __global__ void norm2_batch_kernel(const int* lda, const double* const* d_A_array, const int* ldda, int batchCount, double* norm2_results) {
@@ -59,7 +59,6 @@ __global__ void norm2_batch_kernel(const int* lda, const double* const* d_A_arra
             thread_sum += val * val;
         }
     }
-
     shared_sum[threadIdx.x] = thread_sum;
     __syncthreads();
 

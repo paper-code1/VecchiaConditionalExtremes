@@ -7,13 +7,13 @@
 __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                          const double* X2, int ldx2, int incx2, int stridex2,
                                          double* C, int ldc, int n, int dim, 
-                                         double sigma2, double range, double nugget);
+                                         double sigma2, double range, double nugget, bool nugget_tag);
 
 // Host function to launch the kernel
 // (coalesced memory access)
 void RBF_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                 const double* d_X2, int ldx2, int incx2, int stridex2,
-                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta, bool nugget_tag,
                 cudaStream_t stream);
 
 
