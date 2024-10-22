@@ -2,30 +2,23 @@
 #include <cublas_v2.h>
 #include <magma_v2.h>
 #include <thrust/device_vector.h>
-#include <thrust/reduce.h>
-#include <thrust/execution_policy.h>
+#include <thrust/host_vector.h>
+#include <thrust/transform.h>
+#include <thrust/random.h>
 #include <thrust/iterator/counting_iterator.h>
-#include <thrust/iterator/transform_iterator.h>
+#include <thrust/reduce.h>
+#include <thrust/functional.h>
 #include <mpi.h>
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <random>
+#include <numeric>
 
 #include "gpu_operations.h"
 #include "gpu_covariance.h"
 #include "prediction.h"
 #include "error_checking.h"
-
-// Custom functor for strided access
-struct strided_access
-{
-    double* ptr;
-    int stride;
-    strided_access(double* _ptr, int _stride) : ptr(_ptr), stride(_stride) {}
-    __host__ __device__
-    double operator()(int i) const { return ptr[i * stride]; }
-};
-
 
 // Function to perform prediction on the GPU
 void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts)
@@ -145,137 +138,88 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
     }
     checkCudaError(cudaStreamSynchronize(stream));
 
-    // 2.3 generate by reparametrization
-    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
-    checkMagmaError(magma_dpotrf_vbatched(
-            MagmaLower, d_lda_locs,
-            gpuData.d_cov_array, d_ldda_cov,
-            dinfo_magma, batchCount, queue));
-    checkCudaError(cudaStreamSynchronize(stream));
-
-    // do the conditional simulation
-    // // allocate the memory for the conditional simulation
-    int num_observations = gpuData.total_observations_points_size/sizeof(double);
-    double *d_observations_conditional_device;
-    double **h_observations_conditional_array = new double*[opts.numBlocksPerProcess_test * opts.num_simulations];
-    double **_d_observations_conditional_array_temp;
-    checkCudaError(cudaMalloc(&d_observations_conditional_device, num_observations * sizeof(double) * opts.num_simulations));
-    checkCudaError(cudaMemset(d_observations_conditional_device, 0, num_observations * sizeof(double) * opts.num_simulations));
-    checkCudaError(cudaMalloc(&_d_observations_conditional_array_temp, opts.numBlocksPerProcess_test * sizeof(double *)));
-    int offset_outer_data = 0;
-    int offset_outer_array   = 0;
-    for (size_t i = 0; i < opts.num_simulations; ++i){
-        int offset_inner = 0;
-        for (size_t j = 0; j < opts.numBlocksPerProcess_test; ++j){
-            h_observations_conditional_array[j + offset_outer_array] = d_observations_conditional_device + offset_outer_data + offset_inner;
-            offset_inner += gpuData.ldda_locs[j];
+    // New code starts here
+    // 3. Copy mean and variance from GPU to CPU
+    std::vector<double> h_means(gpuData.numPointsPerProcess);
+    std::vector<double> h_variances(gpuData.numPointsPerProcess);
+    std::vector<double> true_observations(gpuData.numPointsPerProcess);
+    // Copy true observations, accounting for padding
+    int offset = 0;
+    for (size_t i = 0; i < batchCount; ++i) {
+        checkCudaError(cudaMemcpy(true_observations.data() + offset, 
+                                  gpuData.h_observations_array[i], 
+                                  gpuData.lda_locs[i] * sizeof(double), 
+                                  cudaMemcpyDeviceToHost));
+        checkCudaError(cudaMemcpy(h_means.data() + offset, 
+                                  gpuData.h_observations_copy_array[i], 
+                                  gpuData.lda_locs[i] * sizeof(double), 
+                                  cudaMemcpyDeviceToHost));
+        //copy the diagonal of the covariance matrix
+        for (size_t j = 0; j < gpuData.lda_locs[i]; ++j){
+            checkCudaError(cudaMemcpy(h_variances.data() + offset + j, 
+                                      &gpuData.h_cov_array[i][j * gpuData.ldda_cov[i] + j], 
+                                      sizeof(double), 
+                                      cudaMemcpyDeviceToHost));
         }
-        offset_outer_data += num_observations;
-        offset_outer_array += opts.numBlocksPerProcess_test;
-    }
-    // generate the random noise - h_mu_correction_array
-    for (size_t i = 0; i < opts.num_simulations; ++i){
-        // generate the random noise,
-        // copy h_observations_conditional_array to the device
-        checkCudaError(cudaMemcpy(_d_observations_conditional_array_temp, h_observations_conditional_array + i * opts.numBlocksPerProcess_test, opts.numBlocksPerProcess_test * sizeof(double *), cudaMemcpyHostToDevice));
-        // // gpuData.h_mu_correction_array[0] means we generate noise for all blocks
-        generate_normal(gpuData.h_mu_correction_array[0], num_observations, 0, 1, rank * opts.num_simulations + i, stream);
-        checkCudaError(cudaStreamSynchronize(stream));
-        // cholesky factor gemm
-        magmablas_dgemm_vbatched_max_nocheck(MagmaNoTrans, MagmaNoTrans,
-                             d_lda_locs, d_const1, d_lda_locs,
-                             1, gpuData.d_cov_array, d_ldda_cov,
-                                gpuData.d_mu_correction_array, d_ldda_locs,
-                             0, _d_observations_conditional_array_temp, d_ldda_locs,
-                             batchCount, 
-                             max_n1, max_n2, max_n1,
-                             queue);
-        checkCudaError(cudaStreamSynchronize(stream));
-        // error term
-        magma_daxpy(num_observations, -1.,
-                    gpuData.d_observations_copy_device, 1,
-                    d_observations_conditional_device + num_observations * i, 1,
-                    queue);
-        checkCudaError(cudaStreamSynchronize(stream));
+        offset += gpuData.lda_locs[i];
     }
 
-    // Calculate mean and standard deviation using Thrust
-    thrust::device_vector<double> d_mean(num_observations);
-    thrust::device_vector<double> d_stddev(num_observations);
-
-    // Calculate mean
-    for (int i = 0; i < num_observations; ++i) {
-        strided_access sa(d_observations_conditional_device + i, num_observations);
-        double sum = thrust::reduce(
-            thrust::cuda::par.on(stream),
-            thrust::make_transform_iterator(thrust::counting_iterator<int>(0), sa),
-            thrust::make_transform_iterator(thrust::counting_iterator<int>(opts.num_simulations), sa),
-            0.0, 
-            thrust::plus<double>()
-        );
-        d_mean[i] = sum / opts.num_simulations;
+    // 4. Perform sampling
+    std::mt19937 gen(rank);
+    std::vector<std::vector<double>> samples(gpuData.numPointsPerProcess, 
+                                             std::vector<double>(opts.num_simulations));
+    for (int i = 0; i < gpuData.numPointsPerProcess; ++i) {
+        std::normal_distribution<double> d(h_means[i], std::sqrt(h_variances[i]));
+        for (int j = 0; j < opts.num_simulations; ++j) {
+            samples[i][j] = d(gen);
+        }
     }
 
-    // Calculate standard deviation
-    for (int i = 0; i < num_observations; ++i) {
-        strided_access sa(d_observations_conditional_device + i, num_observations);
-        double mean = d_mean[i];
-        double sum_sq = thrust::transform_reduce(
-            thrust::cuda::par.on(stream),
-            thrust::make_transform_iterator(thrust::counting_iterator<int>(0), sa),
-            thrust::make_transform_iterator(thrust::counting_iterator<int>(opts.num_simulations), sa),
-            [mean] __device__ (double x) { return (x - mean) * (x - mean); },
-            0.0,
-            thrust::plus<double>()
-        );
-        d_stddev[i] = sqrt(sum_sq / (opts.num_simulations - 1));
+    // 5. Calculate sample mean and sample variance
+    std::vector<double> sample_means(gpuData.numPointsPerProcess);
+    std::vector<double> sample_variances(gpuData.numPointsPerProcess);
+    
+    for (int i = 0; i < gpuData.numPointsPerProcess; ++i) {
+        double sum = std::accumulate(samples[i].begin(), samples[i].end(), 0.0);
+        sample_means[i] = sum / opts.num_simulations;
+        
+        double sq_sum = std::inner_product(samples[i].begin(), samples[i].end(), samples[i].begin(), 0.0);
+        sample_variances[i] = sq_sum / opts.num_simulations - sample_means[i] * sample_means[i];
     }
 
-    // to calculate the SSPE (sum of squared prediction errors)
-    double sspe_total = 0;
-    double sspe_local = thrust::transform_reduce(
-        thrust::cuda::par.on(stream),
-        d_mean.begin(),
-        d_mean.end(),
-        [] __device__ (double x) { return x * x; },
-        0.0,
-        thrust::plus<double>()
-    );
-    MPI_Allreduce(&sspe_local, &sspe_total, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    double mspe = sspe_total / opts.numPointsTotal_test;
-    if (rank == 0){
+    // 6. Calculate MSPE and confidence interval coverage
+    
+    double local_mspe_sum = 0.0;
+    int local_within_ci = 0;
+    int local_point_count = gpuData.numPointsPerProcess;
+    
+    for (int i = 0; i < gpuData.numPointsPerProcess; ++i) {
+        local_mspe_sum += std::pow(sample_means[i] - true_observations[i], 2);
+        
+        double ci_lower = sample_means[i] - 1.96 * std::sqrt(sample_variances[i]);
+        double ci_upper = sample_means[i] + 1.96 * std::sqrt(sample_variances[i]);
+        
+        if (true_observations[i] >= ci_lower && true_observations[i] <= ci_upper) {
+            local_within_ci++;
+        }
+    }
+    
+    // MPI Allreduce to sum up mspe, within_ci, and point counts across all processes
+    double global_mspe_sum = 0.0;
+    int global_within_ci = 0;
+    int global_point_count = 0;
+    MPI_Allreduce(&local_mspe_sum, &global_mspe_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_within_ci, &global_within_ci, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_point_count, &global_point_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    // Calculate final MSPE and CI coverage
+    double mspe = global_mspe_sum / global_point_count;
+    double ci_coverage = static_cast<double>(global_within_ci) / global_point_count;
+
+    // Print results
+    if (rank == 0) {
         std::cout << "MSPE: " << mspe << std::endl;
-        std::cout << "--------------------------------" << std::endl;
+        std::cout << "95% CI coverage: " << ci_coverage * 100 << "%" << std::endl;
+        std::cout << "-------------------Prediction Done-----------------" << std::endl;
     }
-
-
-    //print the mean and standard deviation
-    if (rank == 0 && opts.print){
-        int offset = 0;
-        int count_within_interval = 0;
-        int total_points = 0;
-        std::cout << "numBlocksPerProcess_test: " << opts.numBlocksPerProcess_test << std::endl;
-        for (int i = 0; i < opts.numBlocksPerProcess_test; ++i){
-            for (int j = 0; j < gpuData.lda_locs[i]; ++j){
-                double mean = d_mean[offset + j];
-                double stddev = d_stddev[offset + j];
-                double lower_bound = mean - 1.96 * stddev;
-                double upper_bound = mean + 1.96 * stddev;
-                if (lower_bound <= 0 && upper_bound >= 0) {
-                    count_within_interval++;
-                }
-                total_points++;
-                std::cout << "mean[" << i << "][" << j << "]: " << mean << ", stddev[" << i << "][" << j << "]: " << stddev << std::endl;
-            }
-            offset += gpuData.ldda_locs[i];
-        }
-        double percentage_within_interval = (static_cast<double>(count_within_interval) / total_points) * 100;
-        std::cout << "Percentage of .95 intervals containing 0: " << percentage_within_interval << "%" << std::endl;
-    }
-
-    // free d_observations_conditional_device
-    cudaFree(d_observations_conditional_device);
-    cudaFree(_d_observations_conditional_array_temp);
 }
-
-

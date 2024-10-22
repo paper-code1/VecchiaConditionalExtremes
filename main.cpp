@@ -242,7 +242,9 @@ int main(int argc, char **argv)
     double duration_computation_seconds = duration_computation.count();
     MPI_Allreduce(&duration_computation_seconds, &avg_duration_computation, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     avg_duration_computation /= size;
-
+    if (rank == 0 && opts.mode != "performance"){
+        std::cout << "-------------------Estimation Done-----------------" << std::endl;
+    }
     // Step 3: Cleanup GPU memory
     cleanupGpuMemory(gpuData);
 

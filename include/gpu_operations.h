@@ -44,6 +44,7 @@ struct GpuData
     int *d_lda_locs;
     int *d_lda_locs_neighbors;
     int *d_const1;
+    int numPointsPerProcess;// number of point after outer partition
     int total_observations_points_size; // bytes
     int total_observations_neighbors_size; // bytes
     int total_locs_num_device; // number of points (including the padding)

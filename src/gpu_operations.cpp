@@ -66,11 +66,14 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     size_t total_locs_size_device = 0;
     size_t total_locs_nearestNeighbors_size_device = 0;
 
+    gpuData.numPointsPerProcess = 0;
     for (size_t i = 0; i < blockInfos.size(); ++i)
     {
         // number of clusters and their nearest neighbors
         int m_blocks = blockInfos[i].blocks.size();
         int m_nearest_neighbor = blockInfos[i].nearestNeighbors.size();
+        // number of points per process
+        gpuData.numPointsPerProcess += m_blocks;
         // 32 is the aligned 32 threads in a warp in GPU
         gpuData.ldda_locs[i] = magma_roundup(m_blocks, 32); 
         gpuData.ldda_neighbors[i] = magma_roundup(m_nearest_neighbor, 32); 
