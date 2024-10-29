@@ -81,6 +81,13 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
                     opts.dim, theta, true, stream);
         // Synchronize to make sure the kernel has finished
         checkCudaError(cudaStreamSynchronize(stream));
+        // if (i == 160){
+            // magma_dprint_gpu(gpuData.lda_locs_neighbors[i], gpuData.lda_locs_neighbors[i], gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], queue);
+            // magma_dprint_gpu(gpuData.lda_locs_neighbors[i],gpuData.lda_locs[i], gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], queue);
+            // print coordinate 
+            // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i], gpuData.ldda_cov[i], queue);
+            // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i] + gpuData.total_locs_num_device, gpuData.ldda_cov[i], queue);
+        // }
     }    
     
     // 2. perform the computation
@@ -96,6 +103,7 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_cross_cov_array, d_ldda_cross_cov,
                         batchCount, queue);
+    // magma_dprint_gpu(gpuData.lda_locs_neighbors[160], 1, gpuData.h_observations_neighbors_copy_array[160], gpuData.ldda_conditioning_cov[160], queue);
     magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
                         max_m, max_n2, 
                         d_lda_locs_neighbors, d_const1,
@@ -103,6 +111,7 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
                         batchCount, queue);
+    // magma_dprint_gpu(gpuData.lda_locs_neighbors[160], 1, gpuData.h_observations_neighbors_copy_array[160], gpuData.ldda_conditioning_cov[160], queue);
     // gemm
     magmablas_dgemm_vbatched_max_nocheck(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
@@ -130,11 +139,11 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
                         gpuData.h_cov_array[i], gpuData.ldda_cov[i],
                         queue);
         // compute conditional mean
-        magmablas_dgeadd(gpuData.lda_locs[i], 1,
-                        -1.,
-                        gpuData.h_mu_correction_array[i], gpuData.ldda_locs[i], 
-                        gpuData.h_observations_copy_array[i], gpuData.ldda_locs[i],
-                        queue);
+        // copy h_mu_correction_array to h_observations_copy_array
+        checkCudaError(cudaMemcpy(gpuData.h_observations_copy_array[i], 
+                                  gpuData.h_mu_correction_array[i], 
+                                  gpuData.lda_locs[i] * sizeof(double), 
+                                  cudaMemcpyDeviceToHost));
     }
     checkCudaError(cudaStreamSynchronize(stream));
 
@@ -191,30 +200,30 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
     
     double local_mspe_sum = 0.0;
     int local_within_ci = 0;
-    int local_point_count = gpuData.numPointsPerProcess;
     
     for (int i = 0; i < gpuData.numPointsPerProcess; ++i) {
         local_mspe_sum += std::pow(sample_means[i] - true_observations[i], 2);
         
-        double ci_lower = sample_means[i] - 1.96 * std::sqrt(sample_variances[i]);
-        double ci_upper = sample_means[i] + 1.96 * std::sqrt(sample_variances[i]);
+        // double ci_lower = sample_means[i] - 1.96 * std::sqrt(sample_variances[i]);
+        // double ci_upper = sample_means[i] + 1.96 * std::sqrt(sample_variances[i]);
+        double ci_lower = h_means[i] - 1.96 * std::sqrt(h_variances[i]);
+        double ci_upper = h_means[i] + 1.96 * std::sqrt(h_variances[i]);
         
         if (true_observations[i] >= ci_lower && true_observations[i] <= ci_upper) {
             local_within_ci++;
         }
+        // std::cout << "true_observations["<< i <<"]: " << true_observations[i] << ", predicted mean: " << h_means[i] << ", predicted variance: " << h_variances[i] << ", sample_means["<< i <<"]: " << sample_means[i] << ", sample_variances["<< i <<"]: " << sample_variances[i] << ", ci_lower: " << ci_lower << ", ci_upper: " << ci_upper << std::endl;
     }
     
     // MPI Allreduce to sum up mspe, within_ci, and point counts across all processes
     double global_mspe_sum = 0.0;
     int global_within_ci = 0;
-    int global_point_count = 0;
     MPI_Allreduce(&local_mspe_sum, &global_mspe_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&local_within_ci, &global_within_ci, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&local_point_count, &global_point_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
     // Calculate final MSPE and CI coverage
-    double mspe = global_mspe_sum / global_point_count;
-    double ci_coverage = static_cast<double>(global_within_ci) / global_point_count;
+    double mspe = global_mspe_sum / opts.numPointsTotal_test;
+    double ci_coverage = static_cast<double>(global_within_ci) / opts.numPointsTotal_test;
 
     // Print results
     if (rank == 0) {

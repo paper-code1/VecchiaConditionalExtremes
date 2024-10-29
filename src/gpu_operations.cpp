@@ -111,6 +111,19 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     checkCudaError(cudaMalloc(&gpuData.d_observations_copy_device, total_observations_points_size));
     checkCudaError(cudaMalloc(&gpuData.d_mu_correction_device, total_observations_points_size));
     checkCudaError(cudaMalloc(&gpuData.d_cov_correction_device, total_cov_size));
+
+    // set device memory to zero
+    checkCudaError(cudaMemset(gpuData.d_locs_device, 0, total_locs_size_device));
+    checkCudaError(cudaMemset(gpuData.d_locs_neighbors_device, 0, total_locs_nearestNeighbors_size_device));
+    checkCudaError(cudaMemset(gpuData.d_observations_device, 0, total_observations_points_size));
+    checkCudaError(cudaMemset(gpuData.d_observations_neighbors_device, 0, total_observations_nearestNeighbors_size));
+    checkCudaError(cudaMemset(gpuData.d_cov_device, 0, total_cov_size));
+    checkCudaError(cudaMemset(gpuData.d_conditioning_cov_device, 0, total_conditioning_cov_size));
+    checkCudaError(cudaMemset(gpuData.d_cross_cov_device, 0, total_cross_cov_size));
+    checkCudaError(cudaMemset(gpuData.d_observations_neighbors_copy_device, 0, total_observations_nearestNeighbors_size));
+    checkCudaError(cudaMemset(gpuData.d_observations_copy_device, 0, total_observations_points_size));
+    checkCudaError(cudaMemset(gpuData.d_mu_correction_device, 0, total_observations_points_size));
+    checkCudaError(cudaMemset(gpuData.d_cov_correction_device, 0, total_cov_size)); 
     
     // Prepare to store blocks data for coalesced memory access
     double *locs_blocks_data = new double[total_locs_size_host/sizeof(double)];
@@ -271,6 +284,8 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     size_t batchCount = gpuData.ldda_locs.size() - 1;
     // allocate memory for magma use
     checkMagmaError(magma_imalloc(&gpuData.dinfo_magma, batchCount + 1));
+    // Set dinfo_magma to 0
+    checkCudaError(cudaMemset(gpuData.dinfo_magma, 0, (batchCount + 1) * sizeof(magma_int_t)));
     checkCudaError(cudaMalloc((void**)&gpuData.d_ldda_locs, (batchCount + 1) * sizeof(int)));
     checkCudaError(cudaMalloc((void**)&gpuData.d_ldda_neighbors, (batchCount + 1) * sizeof(int)));
     checkCudaError(cudaMalloc((void**)&gpuData.d_ldda_cov, (batchCount + 1) * sizeof(int)));
@@ -346,6 +361,10 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // take record of the time
     for (size_t i = 0; i < batchCount; ++i)
     {   
+        // print h_locs_array[i]
+        // std::cout << "before cholesky factorization" << std::endl;
+        // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i], gpuData.ldda_cov[i], queue);
+        // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i] + gpuData.total_locs_num_device, gpuData.ldda_cov[i], queue);
         RBF_matcov(gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_locs_array[i],
@@ -374,6 +393,7 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         dinfo_magma, batchCount, queue);
+    
     // trsm
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
     magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
@@ -409,6 +429,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                              queue);
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
     checkCudaError(cudaStreamSynchronize(stream));
+    // std::cout << "before cholesky factorization" << std::endl;
+    // magma_dprint_gpu(gpuData.lda_locs[0], 1, gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
     // 2.2 compute the conditional mean and variance
     for (size_t i = 0; i < batchCount; ++i){
         // compute conditional variance
@@ -424,17 +446,23 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                         gpuData.h_observations_copy_array[i], gpuData.ldda_locs[i],
                         queue);
         // print h_mu_correction_array[i]
+        // print gpuData.ldda_locs[i]
+        // std::cout << "gpuData.ldda_locs[" << i << "]: " << gpuData.ldda_locs[i] << ", gpuData.lda_locs[" << i << "]: " << gpuData.lda_locs[i] << std::endl;
         // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_mu_correction_array[i], gpuData.ldda_locs[i], queue);
     }
     checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
-    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
+    // std::cout << "before cholesky factorization" << std::endl;
+    // magma_dprint_gpu(gpuData.lda_locs[0], 5, gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
+    // copy and print dinfo_magma
     checkMagmaError(magma_dpotrf_vbatched(
             MagmaLower, d_lda_locs,
             gpuData.d_cov_array, d_ldda_cov,
             dinfo_magma, batchCount, queue));
-// magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
+    // std::cout << "after cholesky factorization" << std::endl;
+    // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[0] << std::endl;
+    // magma_dprint_gpu(gpuData.lda_locs[0], 5, gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
     magmablas_dtrsm_vbatched(
         MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
         d_lda_locs, d_const1, 1.,
@@ -452,7 +480,7 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
         log_det_item + norm2_item // the constant term is removed for simplicity
     );
     //print log_det_item and norm2_item
-    // std::cout << "log_det_item: " << log_det_item << ", norm2_item: " << norm2_item << std::endl;
+    // std::cout << "batchcount: " << batchCount << ", log_det_item: " << log_det_item << ", norm2_item: " << norm2_item << std::endl;
     double log_likelihood_all = 0;
     // mpi sum for log-likelihood
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);

@@ -142,6 +142,7 @@ void finerPartition(const std::vector<PointMetadata>& metadata, int numBlocksPer
     // Perform k-means++ clustering
     std::vector<int> clusters = kMeansPlusPlus(metadata, numBlocksPerProcess, opts.dim, opts.kmeans_max_iter, rank, opts.seed);
 
+    // std::cout << "Finer partitioning 1" << std::endl;
     // Assign points to clusters
     for (size_t i = 0; i < metadata.size(); ++i) {
         finerPartitions[clusters[i]].push_back(metadata[i]);
@@ -285,7 +286,6 @@ std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int 
     std::vector<int> clusters(metadata.size());
     std::vector<std::vector<double>> centroids(k, std::vector<double>(dim));
     std::mt19937 gen(seed + rank);  // Use fixed seed + rank for reproducibility
-
     // Choose the first centroid randomly
     std::uniform_int_distribution<> dis(0, metadata.size() - 1);
     int firstCentroidIndex = dis(gen);
@@ -315,6 +315,10 @@ std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int 
 
     // K-means iterations
     for (int iter = 0; iter < maxIterations; ++iter) {
+        // print info for every 10 iterations
+        if (iter % 30 == 0){
+            std::cout << "K-means iteration: " << iter << std::endl;
+        }
         // Assign points to the nearest centroid
         #pragma omp parallel for
         for (size_t i = 0; i < metadata.size(); ++i) {

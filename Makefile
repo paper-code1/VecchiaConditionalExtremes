@@ -65,7 +65,7 @@ LIB+= -lstdc++
 
 #---------------- make -------------------------
 
-TARGET = $(BIN_DIR)/generate_points
+TARGET = $(BIN_DIR)/dbv
 OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o $(OBJ_DIR)/gpu_covariance.o $(OBJ_DIR)/vecchia_helper.o $(OBJ_DIR)/prediction.o
 
 # Add input_parser.h as a dependency for all object files

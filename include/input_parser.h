@@ -68,15 +68,14 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>()->default_value("1.0,0.01,0.0001"))
     ("train_metadata_path", "Path to the training metadata file", cxxopts::value<std::string>()->default_value(""))
     ("test_metadata_path", "Path to the testing metadata file", cxxopts::value<std::string>()->default_value(""))
-    ("gpu_id", "GPU ID", cxxopts::value<int>()->default_value("0"))
     ("dim", "Dimension of the problem", cxxopts::value<int>()->default_value("2"))
     ("seed", "Seed for random number generator", cxxopts::value<int>()->default_value("0"))
-    ("kmeans_max_iter", "Maximum number of iterations for k-means++", cxxopts::value<int>()->default_value("30"))
+    ("kmeans_max_iter", "Maximum number of iterations for k-means++", cxxopts::value<int>()->default_value("100"))
     ("current_iter", "Current iteration for optimization", cxxopts::value<int>()->default_value("0"))
     ("maxeval", "Maximum number of function evaluations", cxxopts::value<int>()->default_value("5000"))
     ("xtol_rel", "Relative tolerance for optimization", cxxopts::value<double>()->default_value("1e-5"))
     ("mode", "Mode type (estimation or prediction or performance)", cxxopts::value<std::string>()->default_value("estimation"))
-    ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("10"))
+    ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("1000"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -103,8 +102,15 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.lower_bounds = result["lower_bounds"].as<std::vector<double>>();
     opts.upper_bounds = result["upper_bounds"].as<std::vector<double>>();
     opts.theta_init = result["theta_init"].as<std::vector<double>>();
-    // gpu_id is used for personal server, hen/swan/..., each server has 2 GPUs
-    opts.gpu_id = (rank < (size / 2)) ? 0 : 1;
+    // Get the total number of GPUs available on the current node
+    int local_gpu_count = 0;
+    cudaGetDeviceCount(&local_gpu_count);
+    if (local_gpu_count == 0) {
+        std::cerr << "No GPUs found on this node for rank " << rank << std::endl;
+        MPI_Finalize();
+        return 0;
+    }
+    opts.gpu_id = rank % local_gpu_count;
     cudaSetDevice(opts.gpu_id);
     magma_queue_create(opts.gpu_id, &opts.queue);
     opts.stream = magma_queue_get_cuda_stream(opts.queue);

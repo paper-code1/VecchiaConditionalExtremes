@@ -15,6 +15,7 @@
 #include "gpu_operations.h"
 #include "vecchia_helper.h"
 #include "prediction.h"
+#include "borehole.hpp"
 #include <nlopt.hpp>
 
 struct OptimizationData {
@@ -100,41 +101,70 @@ int main(int argc, char **argv)
         }
     }
     else{
-        localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
+        std::cout << "Sampling borehole function" << std::endl;
+        // localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
+        // if (opts.mode == "prediction"){
+        //     localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
+        // }
+        opts.dim = 8;
+        std::pair<std::vector<PointMetadata>, std::pair<double, double>> result = Borehole::sample_borehole(opts.numPointsPerProcess, rank, true);
+        localPoints = std::move(result.first);
+        double train_mean = result.second.first;
+        double train_variance = result.second.second;
+        std::cout << "localPoints.size(): " << localPoints.size() << std::endl;
+        std::cout << "rank: " << rank << ", size: " << size << std::endl;
         if (opts.mode == "prediction"){
-            localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
+            std::pair<std::vector<PointMetadata>, std::pair<double, double>> result_test = Borehole::sample_borehole(opts.numPointsPerProcess_test, rank + size*42, false, train_mean, train_variance);
+            localPoints_test = std::move(result_test.first);
         }
+        std::cout << "Sampling done" << std::endl;
     }
-    // time preprocessing
-    auto start_preprocessing = std::chrono::high_resolution_clock::now();
-    
+
+    auto start_total = std::chrono::high_resolution_clock::now();
+
     // 2.1 Partition points and communicate them
+    if (rank == 0){
+        std::cout << "Performing partitioning" << std::endl;
+    }
+    auto start_preprocessing = std::chrono::high_resolution_clock::now();
     std::vector<PointMetadata> localPoints_out_partitioned;
-    partitionPoints(localPoints, localPoints_out_partitioned, opts);
-    MPI_Barrier(MPI_COMM_WORLD);
     std::vector<PointMetadata> localPoints_out_partitioned_test;
+    partitionPoints(localPoints, localPoints_out_partitioned, opts);
     if (opts.mode == "prediction"){
         partitionPoints(localPoints_test, localPoints_out_partitioned_test, opts);
     }
-
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
     // find the maximum duration_preprocessing
-    double avg_duration_preprocessing;
+    double avg_outer_partitioning;
     double duration_preprocessing_seconds = duration_preprocessing.count();
-    MPI_Allreduce(&duration_preprocessing_seconds, &avg_duration_preprocessing, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_preprocessing /= size;
-
+    MPI_Allreduce(&duration_preprocessing_seconds, &avg_outer_partitioning, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_outer_partitioning /= size;
 
     // 2.2 Perform finer partitioning within each processor
+    if (rank == 0){
+        std::cout << "Performing finer partitioning" << std::endl;
+    }
+    auto start_finer_partitioning = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<PointMetadata>> finerPartitions;
     std::vector<std::vector<PointMetadata>> finerPartitions_test;
     finerPartition(localPoints_out_partitioned, opts.numBlocksPerProcess, finerPartitions, opts);
     if (opts.mode == "prediction"){
         finerPartition(localPoints_out_partitioned_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts);
     }
+    MPI_Barrier(MPI_COMM_WORLD);
+    auto end_finer_partitioning = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_finer_partitioning = end_finer_partitioning - start_finer_partitioning;
+    double avg_duration_finer_partitioning;
+    double duration_finer_partitioning_seconds = duration_finer_partitioning.count();
+    MPI_Allreduce(&duration_finer_partitioning_seconds, &avg_duration_finer_partitioning, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_finer_partitioning /= size;
 
     // 2.3 Calculate centers of gravity for each block
+    if (rank == 0){
+        std::cout << "Calculating centers of gravity" << std::endl;
+    }
     std::vector<std::vector<double>> centers = calculateCentersOfGravity(finerPartitions, opts);
     std::vector<std::vector<double>> centers_test;
     if (opts.mode == "prediction"){
@@ -144,7 +174,6 @@ int main(int argc, char **argv)
     // 2.4 Send centers of gravity to processor 0
     std::vector<std::vector<double>> allCenters;
     sendCentersOfGravityToRoot(centers, allCenters, opts);
-
     // 3. Reorder centers at processor 0
     reorderCenters(allCenters, opts);
     MPI_Barrier(MPI_COMM_WORLD);
@@ -169,16 +198,27 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_block_sending = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_block_sending = end_block_sending - start_block_sending;
-    double avg_duration_block_sending;
+    double avg_duration_candidate_preparation;
     double duration_block_sending_seconds = duration_block_sending.count();
-    MPI_Allreduce(&duration_block_sending_seconds, &avg_duration_block_sending, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_block_sending /= size;
+    MPI_Allreduce(&duration_block_sending_seconds, &avg_duration_candidate_preparation, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_candidate_preparation /= size;
 
     // 4.3 NN searching
+    if (rank == 0){
+        std::cout << "Performing NN searching" << std::endl;
+    }
+    auto start_nn_searching = std::chrono::high_resolution_clock::now();
     nearest_neighbor_search(localBlocks, receivedBlocks, opts, false);
     if (opts.mode == "prediction"){
         nearest_neighbor_search(localBlocks_test, receivedBlocks, opts, true);
     }
+    MPI_Barrier(MPI_COMM_WORLD);
+    auto end_nn_searching = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_nn_searching = end_nn_searching - start_nn_searching;
+    double avg_duration_nn_searching;
+    double duration_nn_searching_seconds = duration_nn_searching.count();
+    MPI_Allreduce(&duration_nn_searching_seconds, &avg_duration_nn_searching, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_nn_searching /= size;
 
     // free the memory of receivedBlocks
     // receivedBlocks.clear();
@@ -248,6 +288,13 @@ int main(int argc, char **argv)
     // Step 3: Cleanup GPU memory
     cleanupGpuMemory(gpuData);
 
+    auto end_total = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_total = end_total - start_total;
+    double duration_total_seconds = duration_total.count();
+    double avg_duration_total;
+    MPI_Allreduce(&duration_total_seconds, &avg_duration_total, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    avg_duration_total /= size;
+    
     // do the prediction for the test points
     GpuData gpuData_test;
     if (opts.mode == "prediction"){
@@ -259,7 +306,14 @@ int main(int argc, char **argv)
     // save the time and gflops to a file
     MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
-        saveTimeAndGflops(avg_duration_preprocessing, avg_duration_computation, avg_duration_block_sending, total_gflops, opts.numPointsPerProcess, opts.numPointsPerProcess, opts.numBlocksTotal, opts.m, opts.seed);
+        saveTimeAndGflops(avg_outer_partitioning, avg_duration_finer_partitioning, 
+        avg_duration_computation, avg_duration_candidate_preparation, 
+        avg_duration_nn_searching, avg_duration_total,
+        total_gflops, 
+        opts.numPointsPerProcess, opts.numPointsTotal, 
+        opts.numBlocksPerProcess, opts.numBlocksTotal, 
+        opts.m, 
+        opts.seed);
     }
     
     MPI_Finalize();
