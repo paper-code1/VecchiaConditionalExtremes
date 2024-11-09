@@ -82,9 +82,15 @@ int main(int argc, char **argv)
         std::cout << "The number of nearest neighbors: " << opts.m << std::endl;
         std::cout << "The number of nearest neighbors_test: " << opts.m_test << std::endl;
         std::cout << "The distance threshold: " << opts.distance_threshold << std::endl;
+        std::cout << "Dimension: " << opts.dim << std::endl;
+        std::cout << "Distance scale: ";
+        for (auto scale : opts.distance_scale) {
+            std::cout << scale << ", ";
+        }
+        std::cout << std::endl;
         // print the varied size of theta
         std::cout << "Theta: ";
-        for (auto theta : opts.theta) {
+        for (auto theta : opts.theta_init) {
             std::cout << theta << ", ";
         }
         std::cout << std::endl;
@@ -118,6 +124,12 @@ int main(int argc, char **argv)
             localPoints_test = std::move(result_test.first);
         }
         std::cout << "Sampling done" << std::endl;
+    }
+
+    // do the distance scale for input points
+    distanceScale(localPoints, opts);
+    if (opts.mode == "prediction"){
+        distanceScale(localPoints_test, opts);
     }
 
     auto start_total = std::chrono::high_resolution_clock::now();
@@ -212,6 +224,14 @@ int main(int argc, char **argv)
     if (opts.mode == "prediction"){
         nearest_neighbor_search(localBlocks_test, receivedBlocks, opts, true);
     }
+    // print 1st block of h_locs_neighbors_array
+    // for (auto block : localBlocks[1].nearestNeighbors){
+    //     for (auto val : block){
+    //         std::cout << val << ", ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_nn_searching = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_nn_searching = end_nn_searching - start_nn_searching;
@@ -235,9 +255,9 @@ int main(int argc, char **argv)
     auto start_computation = std::chrono::high_resolution_clock::now();
 
     // Set up the optimization problem
-    nlopt::opt optimizer(nlopt::LN_BOBYQA, opts.theta.size());
+    nlopt::opt optimizer(nlopt::LN_BOBYQA, opts.theta_init.size());
     
-    // Set bounds for theta (adjust these as needed)
+    // Set bounds for theta_init (adjust these as needed)
     optimizer.set_lower_bounds(opts.lower_bounds);
     optimizer.set_upper_bounds(opts.upper_bounds);
 
@@ -250,6 +270,21 @@ int main(int argc, char **argv)
 
     // Set the objective function
     optimizer.set_min_objective(objective_function, &opt_data);
+
+    // print the config of optimizer
+    std::cout << "Optimizer config: " << optimizer.get_algorithm() << std::endl;
+    std::cout << "Optimizer lower bounds: ";
+    for (auto bound : opts.lower_bounds) {
+        std::cout << bound << ", ";
+    }
+    std::cout << std::endl;
+    std::cout << "Optimizer upper bounds: ";
+    for (auto bound : opts.upper_bounds) {
+        std::cout << bound << ", ";
+    }
+    std::cout << std::endl;
+    std::cout << "Optimizer xtol_rel: " << opts.xtol_rel << std::endl;
+    std::cout << "Optimizer maxeval: " << opts.maxeval << std::endl;
 
     // Perform the optimization
     std::vector<double> optimized_theta = opts.theta_init;  // Start with initial theta values
@@ -297,9 +332,11 @@ int main(int argc, char **argv)
     
     // do the prediction for the test points
     GpuData gpuData_test;
+    double mspe=-1.;
+    double ci_coverage=-1.;
     if (opts.mode == "prediction"){
         gpuData_test = copyDataToGPU(opts, localBlocks_test);
-        performPredictionOnGPU(gpuData_test, optimized_theta, opts);
+        std::tie(mspe, ci_coverage) = performPredictionOnGPU(gpuData_test, optimized_theta, opts);
         cleanupGpuMemory(gpuData_test);
     }
     
@@ -313,7 +350,8 @@ int main(int argc, char **argv)
         opts.numPointsPerProcess, opts.numPointsTotal, 
         opts.numBlocksPerProcess, opts.numBlocksTotal, 
         opts.m, 
-        opts.seed);
+        opts.seed,
+        mspe, ci_coverage);
     }
     
     MPI_Finalize();

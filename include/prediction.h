@@ -2,6 +2,6 @@
 #define PREDICTION_H
 
 // Function to perform prediction on the GPU
-void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts);
+std::pair<double, double> performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts);
 
 #endif // PREDICTION_H

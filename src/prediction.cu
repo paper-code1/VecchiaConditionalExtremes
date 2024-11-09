@@ -21,7 +21,7 @@
 #include "error_checking.h"
 
 // Function to perform prediction on the GPU
-void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts)
+std::pair<double, double> performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -61,19 +61,19 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
     // take record of the time
     for (size_t i = 0; i < batchCount; ++i)
     {   
-        RBF_matcov(gpuData.h_locs_array[i],
+        Matern_matcov(gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
                     opts.dim, theta, true, stream);
-        RBF_matcov(gpuData.h_locs_neighbors_array[i], 
+        Matern_matcov(gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
                     opts.dim, theta, false, stream);
-        RBF_matcov(gpuData.h_locs_neighbors_array[i],
+        Matern_matcov(gpuData.h_locs_neighbors_array[i],
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
@@ -231,4 +231,5 @@ void performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &t
         std::cout << "95% CI coverage: " << ci_coverage * 100 << "%" << std::endl;
         std::cout << "-------------------Prediction Done-----------------" << std::endl;
     }
+    return std::make_pair(mspe, ci_coverage);
 }

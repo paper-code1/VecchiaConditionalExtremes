@@ -359,25 +359,26 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // Use the data on the GPU for computation
     // 1. generate the covariance matrix, cross covariance matrix, conditioning covariance matrix
     // take record of the time
+    // for (size_t k = 0; k < opts.dim; ++k){
+    //     magma_dprint_gpu(gpuData.lda_locs_neighbors[1], 1, gpuData.h_locs_neighbors_array[1] + k * gpuData.total_locs_neighbors_num_device, gpuData.ldda_conditioning_cov[1], queue);
+    // }
     for (size_t i = 0; i < batchCount; ++i)
     {   
         // print h_locs_array[i]
         // std::cout << "before cholesky factorization" << std::endl;
-        // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i], gpuData.ldda_cov[i], queue);
-        // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i] + gpuData.total_locs_num_device, gpuData.ldda_cov[i], queue);
-        RBF_matcov(gpuData.h_locs_array[i],
+        Matern_matcov(gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
                     opts.dim, theta, true, stream);
-        RBF_matcov(gpuData.h_locs_neighbors_array[i], 
+        Matern_matcov(gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
                     opts.dim, theta, false, stream);
-        RBF_matcov(gpuData.h_locs_neighbors_array[i],
+        Matern_matcov(gpuData.h_locs_neighbors_array[i],
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
@@ -386,6 +387,7 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
         // Synchronize to make sure the kernel has finished
         checkCudaError(cudaStreamSynchronize(stream));
     }    
+    // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[1] << std::endl;
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
     
     // 2. perform the computation
@@ -396,6 +398,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     
     // trsm
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
+    // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue);
+    // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue);
     magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
                         max_m, max_n1, 
                         d_lda_locs_neighbors, d_lda_locs,
@@ -411,6 +415,7 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                         gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
                         batchCount, queue);
     // gemm
+    // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue);
     magmablas_dgemm_vbatched_max_nocheck(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
                              1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
@@ -430,7 +435,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
     checkCudaError(cudaStreamSynchronize(stream));
     // std::cout << "before cholesky factorization" << std::endl;
-    // magma_dprint_gpu(gpuData.lda_locs[0], 1, gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
+    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
+    // magma_dprint_gpu(gpuData.lda_locs[1], gpuData.lda_locs[1], gpuData.h_cov_correction_array[0], gpuData.ldda_cov[1], queue);
     // 2.2 compute the conditional mean and variance
     for (size_t i = 0; i < batchCount; ++i){
         // compute conditional variance
@@ -454,7 +460,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
 
     // 2.3 compute the log-likelihood
     // std::cout << "before cholesky factorization" << std::endl;
-    // magma_dprint_gpu(gpuData.lda_locs[0], 5, gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
+    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_correction_array[0], gpuData.ldda_cov[0], queue);
+    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
     // copy and print dinfo_magma
     checkMagmaError(magma_dpotrf_vbatched(
             MagmaLower, d_lda_locs,

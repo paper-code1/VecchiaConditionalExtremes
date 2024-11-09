@@ -62,10 +62,10 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<int>()->default_value("100"))
     ("m_test", "Special rule for the first 100 blocks for testing", cxxopts::value<int>()->default_value("120"))
     ("distance_threshold", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
-    ("theta", "Parameters for the covariance function", cxxopts::value<std::vector<double>>()->default_value("1.0,0.01,0.0001"))
-    ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("0.01,0.01,0.00001"))
-    ("upper_bounds", "Upper bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("3,3,0.1"))
-    ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>()->default_value("1.0,0.01,0.0001"))
+    ("distance_scale", "Distance scale for blocks", cxxopts::value<std::vector<double>>()->default_value(""))
+    ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("0.01,0.01,0.01,0.1"))
+    ("upper_bounds", "Upper bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("3,3,3,1"))
+    ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>()->default_value("1.0,0.01,0.5,0.1"))
     ("train_metadata_path", "Path to the training metadata file", cxxopts::value<std::string>()->default_value(""))
     ("test_metadata_path", "Path to the testing metadata file", cxxopts::value<std::string>()->default_value(""))
     ("dim", "Dimension of the problem", cxxopts::value<int>()->default_value("2"))
@@ -98,7 +98,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.m = result["m"].as<int>();
     opts.m_test = result["m_test"].as<int>();
     opts.distance_threshold = result["distance_threshold"].as<double>();
-    opts.theta = result["theta"].as<std::vector<double>>();
+    // opts.theta = result["theta"].as<std::vector<double>>();
     opts.lower_bounds = result["lower_bounds"].as<std::vector<double>>();
     opts.upper_bounds = result["upper_bounds"].as<std::vector<double>>();
     opts.theta_init = result["theta_init"].as<std::vector<double>>();
@@ -116,6 +116,11 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.stream = magma_queue_get_cuda_stream(opts.queue);
     opts.seed = result["seed"].as<int>();
     opts.dim = result["dim"].as<int>();
+    if (result.count("distance_scale")) {
+        opts.distance_scale = result["distance_scale"].as<std::vector<double>>();
+    }else{
+        opts.distance_scale = std::vector<double>(opts.dim, 1.0);
+    }
     opts.kmeans_max_iter = result["kmeans_max_iter"].as<int>();
     opts.train_metadata_path = result["train_metadata_path"].as<std::string>();
     opts.test_metadata_path = result["test_metadata_path"].as<std::string>();

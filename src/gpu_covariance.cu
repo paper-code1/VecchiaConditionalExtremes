@@ -13,7 +13,9 @@
 // (coalesced memory access)
 __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
-                                          double* C, int ldc, int n, int dim, double sigma2, double range, double nugget, bool nugget_tag) {
+                                          double* C, int ldc, int n, int dim, 
+                                          double sigma2, double range, double nugget, 
+                                          bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -24,13 +26,88 @@ __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int str
             double x2 = X2[j * incx2 + k * stridex2];
             dist_sqaure += (x1 - x2) * (x1 - x2);
         }
-        C[i + j * ldc] = sigma2 * exp( - sqrt(dist_sqaure) / range );
+        double scaled_distance = sqrt(dist_sqaure) / range;
+        C[i + j * ldc] = sigma2 * exp( - scaled_distance );
     }
     // add nugget
     if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
         C[i + j * ldc] += nugget;
     }
 }
+
+// (coalesced memory access)
+__global__ void PowerExp_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+                                          const double* X2, int ldx2, int incx2, int stridex2,
+                                          double* C, int ldc, int n, int dim, 
+                                          double sigma2, double range, double smoothness, 
+                                          double nugget, bool nugget_tag) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = X1[i * incx1 + k * stridex1];
+            double x2 = X2[j * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2);
+        }
+        double scaled_distance = sqrt(dist_sqaure) / range;
+        double power_distance = pow(scaled_distance, smoothness);
+        C[i + j * ldc] = sigma2 * exp( - power_distance );
+    }
+    // add nugget
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
+        C[i + j * ldc] += nugget;
+    }
+}
+
+__global__ void Matern72_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+                                          const double* X2, int ldx2, int incx2, int stridex2,
+                                          double* C, int ldc, int n, int dim, 
+                                          double sigma2, double range, 
+                                          double nugget, bool nugget_tag) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = X1[i * incx1 + k * stridex1];
+            double x2 = X2[j * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2);
+        }
+        double scaled_distance = sqrt(dist_sqaure) / range;
+        double item_poly = 1 + sqrt(7.0) * scaled_distance + 7.0 * scaled_distance * scaled_distance / 3.0;  
+        // + 7.0 * sqrt(7.0) * scaled_distance * scaled_distance * scaled_distance / 15.0; 
+        C[i + j * ldc] = sigma2 * item_poly * exp( - sqrt(7.0) * scaled_distance );
+    }
+    // add nugget
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
+        C[i + j * ldc] += nugget;
+    }
+}
+
+void Matern_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+                const double* d_X2, int ldx2, int incx2, int stridex2,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta, bool nugget_tag,
+                cudaStream_t stream) {
+    // Launch kernel
+    dim3 blockDim(16, 16);
+    dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
+    // the smoothness = 3.5 theta[0]: variance, theta[1]: range, theta[3]: nugget
+    Matern72_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], theta[3], nugget_tag);
+}
+
+void PowerExp_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+                const double* d_X2, int ldx2, int incx2, int stridex2,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta, bool nugget_tag,
+                cudaStream_t stream) {
+    // Launch kernel
+    dim3 blockDim(16, 16);
+    dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
+    PowerExp_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], theta[2], theta[3], nugget_tag);
+}
+
 
 void RBF_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                 const double* d_X2, int ldx2, int incx2, int stridex2,

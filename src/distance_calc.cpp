@@ -191,3 +191,4 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
         }
     }
 }
+
