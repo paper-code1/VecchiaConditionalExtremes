@@ -8,42 +8,8 @@
 #include <cuda_runtime.h>
 #include <mpi.h>
 #include "cxxopts.hpp"
+#include "input_parser_helper.h"
 
-// Structure to store command line options
-struct Opts
-{
-    int numPointsPerProcess;
-    int numPointsTotal;
-    int numBlocksPerProcess;
-    int numBlocksTotal;
-    int numPointsPerProcess_test;
-    int numPointsTotal_test;
-    int numBlocksPerProcess_test;
-    int numBlocksTotal_test;
-    int m; // the number of nearest neighbor
-    int m_test; // the number of nearest neighbor for testing
-    bool print;
-    int gpu_id;
-    int seed;
-    int dim;
-    double distance_threshold;
-    // kmeans and optimization
-    int kmeans_max_iter;
-    int current_iter;
-    int maxeval;
-    double xtol_rel;
-    int num_simulations;
-    std::string mode;
-    std::vector<double> lower_bounds;
-    std::vector<double> upper_bounds;
-    std::vector<double> theta_init;
-
-    std::string train_metadata_path;
-    std::string test_metadata_path;
-    std::vector<double> theta;
-    cudaStream_t stream;
-    magma_queue_t queue;
-};
 
 inline bool parse_args(int argc, char **argv, Opts &opts)
 {
@@ -62,20 +28,24 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<int>()->default_value("100"))
     ("m_test", "Special rule for the first 100 blocks for testing", cxxopts::value<int>()->default_value("120"))
     ("distance_threshold", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
-    ("distance_scale", "Distance scale for blocks", cxxopts::value<std::vector<double>>()->default_value(""))
-    ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("0.01,0.01,0.01,0.1"))
-    ("upper_bounds", "Upper bounds for optimization", cxxopts::value<std::vector<double>>()->default_value("3,3,3,1"))
-    ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>()->default_value("1.0,0.01,0.5,0.1"))
+    ("distance_scale", "Distance scale for blocks, used for scaling distance", cxxopts::value<std::vector<double>>())
+    ("distance_scale_init", "Initial distance scale for blocks, used for optimization", cxxopts::value<std::vector<double>>())
+    ("kernel_type", "Kernel type", cxxopts::value<std::string>()->default_value("Matern72"))
+    ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>())
+    ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>())
+    ("upper_bounds", "Upper bounds for optimization", cxxopts::value<std::vector<double>>())
     ("train_metadata_path", "Path to the training metadata file", cxxopts::value<std::string>()->default_value(""))
     ("test_metadata_path", "Path to the testing metadata file", cxxopts::value<std::string>()->default_value(""))
-    ("dim", "Dimension of the problem", cxxopts::value<int>()->default_value("2"))
+    ("dim", "Dimension of the problem", cxxopts::value<int>()->default_value("8"))
     ("seed", "Seed for random number generator", cxxopts::value<int>()->default_value("0"))
     ("kmeans_max_iter", "Maximum number of iterations for k-means++", cxxopts::value<int>()->default_value("100"))
     ("current_iter", "Current iteration for optimization", cxxopts::value<int>()->default_value("0"))
     ("maxeval", "Maximum number of function evaluations", cxxopts::value<int>()->default_value("5000"))
     ("xtol_rel", "Relative tolerance for optimization", cxxopts::value<double>()->default_value("1e-5"))
+    ("ftol_rel", "Relative tolerance of function for optimization", cxxopts::value<double>()->default_value("1e-5"))
     ("mode", "Mode type (estimation or prediction or performance)", cxxopts::value<std::string>()->default_value("estimation"))
     ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("1000"))
+    ("omp_num_threads", "Number of threads for OpenMP", cxxopts::value<int>()->default_value("20"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -85,7 +55,17 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
         std::cout << options.help() << std::endl;
         return false;
     }
-
+    try
+    {
+        opts.kernel_type = parse_kernel_type(result["kernel_type"].as<std::string>());
+    }
+    catch(const std::runtime_error& e)
+    {
+        if (rank == 0) {
+            std::cerr << e.what() << '\n';
+        }
+        return false;
+    }
     opts.numPointsTotal = result["num_total_points"].as<int>();
     opts.numPointsPerProcess = opts.numPointsTotal / size + (rank < opts.numPointsTotal % size);
     opts.numBlocksTotal = result["num_total_blocks"].as<int>();
@@ -98,10 +78,6 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.m = result["m"].as<int>();
     opts.m_test = result["m_test"].as<int>();
     opts.distance_threshold = result["distance_threshold"].as<double>();
-    // opts.theta = result["theta"].as<std::vector<double>>();
-    opts.lower_bounds = result["lower_bounds"].as<std::vector<double>>();
-    opts.upper_bounds = result["upper_bounds"].as<std::vector<double>>();
-    opts.theta_init = result["theta_init"].as<std::vector<double>>();
     // Get the total number of GPUs available on the current node
     int local_gpu_count = 0;
     cudaGetDeviceCount(&local_gpu_count);
@@ -116,16 +92,50 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.stream = magma_queue_get_cuda_stream(opts.queue);
     opts.seed = result["seed"].as<int>();
     opts.dim = result["dim"].as<int>();
+    opts.omp_num_threads = result["omp_num_threads"].as<int>();
+    // optimized parameters
     if (result.count("distance_scale")) {
         opts.distance_scale = result["distance_scale"].as<std::vector<double>>();
     }else{
         opts.distance_scale = std::vector<double>(opts.dim, 1.0);
     }
+    if (result.count("distance_scale_init")){
+        opts.distance_scale_init = result["distance_scale_init"].as<std::vector<double>>();
+    }else{
+        opts.distance_scale_init = opts.distance_scale;
+    }
+    if (result.count("theta_init")){
+        opts.theta_init = result["theta_init"].as<std::vector<double>>();
+        opts.range_offset = opts.theta_init.size();
+    }else{
+        switch (opts.kernel_type)
+        {
+        case KernelType::PowerExponential:
+            opts.theta_init = {1.0, 0.5, 0.001}; // variance, smoothness, nugget;
+            opts.range_offset = 3;
+            break;
+        case KernelType::Matern72:
+            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.range_offset = 2;
+            break;
+        default:
+            break;
+        }
+    }
+    // append the distance scale to the theta_init
+    opts.theta_init.insert(opts.theta_init.end(), opts.distance_scale_init.begin(), opts.distance_scale_init.end());
+    // add the theta_init to the bounds
+    for (int i=0; i < opts.theta_init.size(); i++) {
+        opts.lower_bounds.push_back(0.01);
+        opts.upper_bounds.push_back(10);
+    }
+    // other options
     opts.kmeans_max_iter = result["kmeans_max_iter"].as<int>();
     opts.train_metadata_path = result["train_metadata_path"].as<std::string>();
     opts.test_metadata_path = result["test_metadata_path"].as<std::string>();
     opts.maxeval = result["maxeval"].as<int>();
     opts.xtol_rel = result["xtol_rel"].as<double>();
+    opts.ftol_rel = result["ftol_rel"].as<double>();
     opts.current_iter = result["current_iter"].as<int>();
     opts.mode = result["mode"].as<std::string>();
     if (opts.mode == "performance"){

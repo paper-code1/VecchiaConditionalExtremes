@@ -10,7 +10,7 @@ CXX = mpic++
 NVCC=$(_CUDA_ROOT_)/bin/nvcc
 
 NVOPTS = -ccbin $(CXX) --compiler-options -fno-strict-aliasing --extended-lambda
-CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas
+CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas -Wunused-variable
 
 ifdef _DEBUG_
   CXXFLAGS += -g -Xcompiler -rdynamic

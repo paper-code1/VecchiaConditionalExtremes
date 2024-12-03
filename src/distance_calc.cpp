@@ -192,3 +192,30 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
     }
 }
 
+void distanceScale(std::vector<PointMetadata> &localPoints, const std::vector<double>& scale_factor, int dim){
+    #pragma omp parallel for
+    for (auto& point: localPoints){
+        for (int i = 0; i < dim; ++i){
+            point.coordinates[i] = point.coordinates[i] / scale_factor[i];
+        }
+    }
+}
+
+void distanceDeScale(std::vector<BlockInfo> &localBlocks, const std::vector<double>& scale_factor, int dim){
+    #pragma omp parallel for
+    for (auto& block: localBlocks){
+        for (auto& point: block.blocks){
+            for (int i = 0; i < dim; ++i){
+                point[i] = point[i] * scale_factor[i];
+            }
+        }
+    }
+    #pragma omp parallel for
+    for (auto& block: localBlocks){
+        for (auto& point: block.nearestNeighbors){
+            for (int i = 0; i < dim; ++i){
+                point[i] = point[i] * scale_factor[i];
+            }
+        }
+    }
+}

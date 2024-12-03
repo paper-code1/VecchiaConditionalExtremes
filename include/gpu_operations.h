@@ -64,6 +64,7 @@ struct GpuData
     double *d_observations_copy_device;
     double *d_mu_correction_device;
     double *d_cov_correction_device;
+    double *d_range_device;
     
     // pointers for matrix and vectors 
     double **d_locs_array;

@@ -54,6 +54,7 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     checkCudaError(cudaMalloc(&gpuData.d_observations_copy_array, blockInfos.size() * sizeof(double *)));
     checkCudaError(cudaMalloc(&gpuData.d_mu_correction_array, blockInfos.size() * sizeof(double *)));
     checkCudaError(cudaMalloc(&gpuData.d_cov_correction_array, blockInfos.size() * sizeof(double *)));
+    checkCudaError(cudaMalloc(&gpuData.d_range_device, opts.dim * sizeof(double)));
 
     // Calculate the total memory needed for blocks and nearest neighbors
     size_t total_observations_points_size = 0;
@@ -345,6 +346,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     magma_int_t max_m = gpuData.max_m;
     magma_int_t max_n1 = gpuData.max_n1;
     magma_int_t max_n2 = gpuData.max_n2;
+    int range_offset = opts.range_offset;
+
 
     // copy the data from the device to the device
     checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_device, 
@@ -355,6 +358,10 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                                    gpuData.d_observations_device, 
                                    gpuData.total_observations_points_size, 
                                    cudaMemcpyDeviceToDevice));
+    checkCudaError(cudaMemcpy(gpuData.d_range_device, 
+                                theta.data() + range_offset, 
+                                opts.dim * sizeof(double), 
+                                cudaMemcpyHostToDevice));
 
     // Use the data on the GPU for computation
     // 1. generate the covariance matrix, cross covariance matrix, conditioning covariance matrix
@@ -366,29 +373,31 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     {   
         // print h_locs_array[i]
         // std::cout << "before cholesky factorization" << std::endl;
-        Matern_matcov(gpuData.h_locs_array[i],
+        // magma_dprint_gpu_custom(gpuData.lda_locs[0], opts.dim, gpuData.h_locs_array[0], gpuData.ldda_cov[0], queue, 5);
+        compute_covariance(gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
-                    opts.dim, theta, true, stream);
-        Matern_matcov(gpuData.h_locs_neighbors_array[i], 
+                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+        compute_covariance(gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_array[i],
                     gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
                     gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
-                    opts.dim, theta, false, stream);
-        Matern_matcov(gpuData.h_locs_neighbors_array[i],
+                    opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+        compute_covariance(gpuData.h_locs_neighbors_array[i],
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_locs_neighbors_array[i], 
                     gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
-                    opts.dim, theta, true, stream);
+                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
         // Synchronize to make sure the kernel has finished
         checkCudaError(cudaStreamSynchronize(stream));
     }    
-    // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[1] << std::endl;
+    // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[0] << std::endl;
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
+    // magma_dprint_gpu_custom(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue, 5);
     
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)

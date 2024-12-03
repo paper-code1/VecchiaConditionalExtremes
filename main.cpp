@@ -7,6 +7,7 @@
 #include <thread>
 #include <iomanip>
 #include <magma_v2.h>
+#include <omp.h>
 #include "input_parser.h"
 #include "block_info.h"
 #include "random_points.h"
@@ -69,12 +70,26 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    omp_set_num_threads(opts.omp_num_threads);
+
     // Use the parsed options
     if (rank == 0) {
         std::cout << "----------------------------------------" << std::endl;
         std::cout << "Mode: " << opts.mode << std::endl;
         std::cout << "train_metadata_path: " << opts.train_metadata_path << std::endl;
         std::cout << "test_metadata_path: " << opts.test_metadata_path << std::endl;
+        switch (opts.kernel_type) {
+            case KernelType::PowerExponential:
+                std::cout << "kernel_type: PowerExponential" << std::endl;
+                break;
+            case KernelType::Matern72:
+                std::cout << "kernel_type: Matern72" << std::endl;
+                break;
+            default:
+                std::cout << "kernel_type: Unsupported" << std::endl;
+                exit(-1);
+                break;
+        }
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;
@@ -83,6 +98,7 @@ int main(int argc, char **argv)
         std::cout << "The number of nearest neighbors_test: " << opts.m_test << std::endl;
         std::cout << "The distance threshold: " << opts.distance_threshold << std::endl;
         std::cout << "Dimension: " << opts.dim << std::endl;
+        std::cout << "Range offset: " << opts.range_offset << std::endl;
         std::cout << "Distance scale: ";
         for (auto scale : opts.distance_scale) {
             std::cout << scale << ", ";
@@ -107,31 +123,31 @@ int main(int argc, char **argv)
         }
     }
     else{
-        std::cout << "Sampling borehole function" << std::endl;
-        // localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
-        // if (opts.mode == "prediction"){
-        //     localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
-        // }
-        opts.dim = 8;
-        std::pair<std::vector<PointMetadata>, std::pair<double, double>> result = Borehole::sample_borehole(opts.numPointsPerProcess, rank, true);
-        localPoints = std::move(result.first);
-        double train_mean = result.second.first;
-        double train_variance = result.second.second;
-        std::cout << "localPoints.size(): " << localPoints.size() << std::endl;
-        std::cout << "rank: " << rank << ", size: " << size << std::endl;
+        localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
         if (opts.mode == "prediction"){
-            std::pair<std::vector<PointMetadata>, std::pair<double, double>> result_test = Borehole::sample_borehole(opts.numPointsPerProcess_test, rank + size*42, false, train_mean, train_variance);
-            localPoints_test = std::move(result_test.first);
+            localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
         }
-        std::cout << "Sampling done" << std::endl;
+        // std::cout << "Sampling borehole function" << std::endl;
+        // opts.dim = 8;
+        // std::pair<std::vector<PointMetadata>, std::pair<double, double>> result = Borehole::sample_borehole(opts.numPointsPerProcess, rank, true);
+        // localPoints = std::move(result.first);
+        // double train_mean = result.second.first;
+        // double train_variance = result.second.second;
+        // std::cout << "localPoints.size(): " << localPoints.size() << std::endl;
+        // std::cout << "rank: " << rank << ", size: " << size << std::endl;
+        // if (opts.mode == "prediction"){
+        //     std::pair<std::vector<PointMetadata>, std::pair<double, double>> result_test = Borehole::sample_borehole(opts.numPointsPerProcess_test, rank + size*42, false, train_mean, train_variance);
+        //     localPoints_test = std::move(result_test.first);
+        // }
+        // std::cout << "Sampling done" << std::endl;
     }
 
     // do the distance scale for input points
-    distanceScale(localPoints, opts);
+    distanceScale(localPoints, opts.distance_scale, opts.dim);
     if (opts.mode == "prediction"){
-        distanceScale(localPoints_test, opts);
+        distanceScale(localPoints_test, opts.distance_scale, opts.dim);
     }
-
+    
     auto start_total = std::chrono::high_resolution_clock::now();
 
     // 2.1 Partition points and communicate them
@@ -224,13 +240,6 @@ int main(int argc, char **argv)
     if (opts.mode == "prediction"){
         nearest_neighbor_search(localBlocks_test, receivedBlocks, opts, true);
     }
-    // print 1st block of h_locs_neighbors_array
-    // for (auto block : localBlocks[1].nearestNeighbors){
-    //     for (auto val : block){
-    //         std::cout << val << ", ";
-    //     }
-    //     std::cout << std::endl;
-    // }
 
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_nn_searching = std::chrono::high_resolution_clock::now();
@@ -239,6 +248,12 @@ int main(int argc, char **argv)
     double duration_nn_searching_seconds = duration_nn_searching.count();
     MPI_Allreduce(&duration_nn_searching_seconds, &avg_duration_nn_searching, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     avg_duration_nn_searching /= size;
+
+    // descale
+    distanceDeScale(localBlocks, opts.distance_scale, opts.dim);
+    if (opts.mode == "prediction"){
+        distanceDeScale(localBlocks_test, opts.distance_scale, opts.dim);
+    }
 
     // free the memory of receivedBlocks
     // receivedBlocks.clear();
@@ -255,15 +270,33 @@ int main(int argc, char **argv)
     auto start_computation = std::chrono::high_resolution_clock::now();
 
     // Set up the optimization problem
-    nlopt::opt optimizer(nlopt::LN_BOBYQA, opts.theta_init.size());
+    nlopt::opt optimizer(nlopt::LN_SBPLX, opts.theta_init.size());
     
     // Set bounds for theta_init (adjust these as needed)
+    // set smoothness and nugget in power exponential kernel
+    switch (opts.kernel_type) {
+        case KernelType::PowerExponential:
+            opts.lower_bounds[0] = 0.01; // sigma2
+            opts.upper_bounds[0] = 3.0;
+            opts.lower_bounds[1] = 0.01; // smoothness
+            opts.upper_bounds[1] = 2.0;
+            opts.lower_bounds[2] = 0.0; // nugget
+            opts.upper_bounds[2] = 0.1;
+            break;
+        case KernelType::Matern72:
+            opts.lower_bounds[0] = 0.01; // sigma2
+            opts.upper_bounds[0] = 3.0;
+            opts.lower_bounds[1] = 0.0; // nugget
+            opts.upper_bounds[1] = 0.1;
+            break;
+    }
     optimizer.set_lower_bounds(opts.lower_bounds);
     optimizer.set_upper_bounds(opts.upper_bounds);
 
     // Set stopping criteria
     optimizer.set_xtol_rel(opts.xtol_rel);
-    optimizer.set_maxeval(opts.maxeval);  // Maximum number of function evaluations
+    optimizer.set_ftol_rel(opts.ftol_rel);
+    optimizer.set_maxeval(opts.maxeval);
 
     // Prepare the optimization data
     OptimizationData opt_data = {&gpuData, &opts, rank, MPI_COMM_WORLD};
@@ -272,19 +305,22 @@ int main(int argc, char **argv)
     optimizer.set_min_objective(objective_function, &opt_data);
 
     // print the config of optimizer
-    std::cout << "Optimizer config: " << optimizer.get_algorithm() << std::endl;
-    std::cout << "Optimizer lower bounds: ";
-    for (auto bound : opts.lower_bounds) {
-        std::cout << bound << ", ";
+    if (rank == 0){
+        std::cout << "Optimizer dimension: " << optimizer.get_dimension() << std::endl;
+        std::cout << "Optimizer lower bounds: ";
+        for (auto bound : opts.lower_bounds) {
+            std::cout << bound << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << "Optimizer upper bounds: ";
+        for (auto bound : opts.upper_bounds) {
+            std::cout << bound << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << "Optimizer xtol_rel: " << opts.xtol_rel << std::endl;
+        std::cout << "Optimizer ftol_rel: " << opts.ftol_rel << std::endl;
+        std::cout << "Optimizer maxeval: " << opts.maxeval << std::endl;
     }
-    std::cout << std::endl;
-    std::cout << "Optimizer upper bounds: ";
-    for (auto bound : opts.upper_bounds) {
-        std::cout << bound << ", ";
-    }
-    std::cout << std::endl;
-    std::cout << "Optimizer xtol_rel: " << opts.xtol_rel << std::endl;
-    std::cout << "Optimizer maxeval: " << opts.maxeval << std::endl;
 
     // Perform the optimization
     std::vector<double> optimized_theta = opts.theta_init;  // Start with initial theta values
@@ -332,13 +368,22 @@ int main(int argc, char **argv)
     
     // do the prediction for the test points
     GpuData gpuData_test;
-    double mspe=-1.;
-    double ci_coverage=-1.;
-    if (opts.mode == "prediction"){
+    double mspe = -1.0;
+    double ci_coverage = -1.0;
+    // std::vector<double> pre_range_factor(opts.distance_scale.begin(), opts.distance_scale.end());
+    // std::vector<double> post_range_factor(optimized_theta.begin() + opts.range_offset, optimized_theta.end());
+    // std::vector<double> new_range_scaled(pre_range_factor.size());
+    // std::vector<double> new_theta(optimized_theta.begin(), optimized_theta.end());
+    // for (size_t i = 0; i < pre_range_factor.size(); ++i) {
+    //     new_range_scaled[i] = pre_range_factor[i] * post_range_factor[i];
+    //     new_theta[i+opts.range_offset] = new_range_scaled[i];
+    // }
+    if (opts.mode == "prediction") {
         gpuData_test = copyDataToGPU(opts, localBlocks_test);
         std::tie(mspe, ci_coverage) = performPredictionOnGPU(gpuData_test, optimized_theta, opts);
         cleanupGpuMemory(gpuData_test);
     }
+
     
     // save the time and gflops to a file
     MPI_Barrier(MPI_COMM_WORLD);
@@ -351,7 +396,7 @@ int main(int argc, char **argv)
         opts.numBlocksPerProcess, opts.numBlocksTotal, 
         opts.m, 
         opts.seed,
-        mspe, ci_coverage);
+        mspe, ci_coverage,optimized_theta.data(), -optimized_log_likelihood, opts);
     }
     
     MPI_Finalize();

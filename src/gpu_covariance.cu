@@ -36,11 +36,11 @@ __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int str
 }
 
 // (coalesced memory access)
-__global__ void PowerExp_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+__global__ void PowerExp_matcov_scaled_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
                                           double* C, int ldc, int n, int dim, 
-                                          double sigma2, double range, double smoothness, 
-                                          double nugget, bool nugget_tag) {
+                                          double sigma2, double smoothness, double nugget, 
+                                          const double* range, bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -49,9 +49,9 @@ __global__ void PowerExp_matcov_kernel(const double* X1, int ldx1, int incx1, in
         for (int k = 0; k < dim; k++) {
             double x1 = X1[i * incx1 + k * stridex1];
             double x2 = X2[j * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2);
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
         }
-        double scaled_distance = sqrt(dist_sqaure) / range;
+        double scaled_distance = sqrt(dist_sqaure);
         double power_distance = pow(scaled_distance, smoothness);
         C[i + j * ldc] = sigma2 * exp( - power_distance );
     }
@@ -60,6 +60,36 @@ __global__ void PowerExp_matcov_kernel(const double* X1, int ldx1, int incx1, in
         C[i + j * ldc] += nugget;
     }
 }
+
+__global__ void Matern72_scaled_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+                                          const double* X2, int ldx2, int incx2, int stridex2,
+                                          double* C, int ldc, int n, int dim, 
+                                          double sigma2, double nugget, 
+                                          const double* range, bool nugget_tag) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = X1[i * incx1 + k * stridex1];
+            double x2 = X2[j * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        double scaled_distance = sqrt(dist_sqaure);
+        double a0 = 1.0;
+        double a1 = 1.0;
+        double a2 = 2.0 / 5.0;
+        double a3 = 1.0 / 15.0;
+        double item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
+        C[i + j * ldc] += nugget;
+    }
+}
+
 
 __global__ void Matern72_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
@@ -98,14 +128,28 @@ void Matern_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
     Matern72_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], theta[3], nugget_tag);
 }
 
-void PowerExp_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+void PowerExp_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                 const double* d_X2, int ldx2, int incx2, int stridex2,
-                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta, bool nugget_tag,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta,
+                const double* range, bool nugget_tag,
                 cudaStream_t stream) {
     // Launch kernel
     dim3 blockDim(16, 16);
     dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
-    PowerExp_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], theta[2], theta[3], nugget_tag);
+    // theta[0]: variance, theta[1]: smoothness, theta[2]: nugget, theta[3:]: range
+    PowerExp_matcov_scaled_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], theta[2], range, nugget_tag);
+}
+
+void Matern72_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+                const double* d_X2, int ldx2, int incx2, int stridex2,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta,
+                const double* range, bool nugget_tag,
+                cudaStream_t stream) {
+    // Launch kernel
+    dim3 blockDim(16, 16);
+    dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    Matern72_scaled_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], range, nugget_tag);
 }
 
 
@@ -285,4 +329,34 @@ void generate_normal(double *data, int n, double mean, double stddev, unsigned l
     dim3 blockDim(THREADS_PER_BLOCK);
     dim3 gridDim((n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
     generate_normal_kernel<<<gridDim, blockDim, 0, stream>>>(data, n, mean, stddev, seed);
+}
+
+// example of how to use kernel types
+void compute_covariance(const double* d_X1, int ldx1, int incx1, int stridex1,
+                      const double* d_X2, int ldx2, int incx2, int stridex2,
+                      double* d_C, int ldc, int n, int dim, 
+                      const std::vector<double> &theta, const double* range,
+                      bool nugget_tag,
+                      cudaStream_t stream, const Opts &opts) {
+    switch (opts.kernel_type) {
+        case KernelType::PowerExponential:
+            PowerExp_scaled_matcov(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                stream);
+            break;
+        case KernelType::Matern72:
+            Matern72_scaled_matcov(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                stream);
+            break;
+        default:
+            throw std::runtime_error("Unsupported kernel type");
+            break;
+    }
 }

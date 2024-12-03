@@ -3,16 +3,18 @@
 
 #include <cuda_runtime.h>
 #include <vector>
+#include "input_parser_helper.h"
 // Function declaration for GPU covariance matrix generation
 __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                          const double* X2, int ldx2, int incx2, int stridex2,
                                          double* C, int ldc, int n, int dim, 
                                          double sigma2, double range, double nugget, bool nugget_tag);
 
-__global__ void PowerExp_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+__global__ void PowerExp_matcov_scaled_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                          const double* X2, int ldx2, int incx2, int stridex2,
                                          double* C, int ldc, int n, int dim, 
-                                         double sigma2, double range, double smoothness, double nugget, bool nugget_tag);
+                                         double sigma2, double smoothness, double nugget, 
+                                         const double* range, bool nugget_tag);
 
 __global__ void Matern72_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
@@ -26,10 +28,11 @@ void Matern_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                 const std::vector<double> &theta, bool nugget_tag, 
                 cudaStream_t stream);
 
-void PowerExp_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+void PowerExp_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                      const double* d_X2, int ldx2, int incx2, int stridex2,
                      double* d_C, int ldc, int n, int dim, 
-                     const std::vector<double> &theta, bool nugget_tag,
+                     const std::vector<double> &theta, const double* range, 
+                     bool nugget_tag,
                      cudaStream_t stream);
 
 // Host function to launch the kernel
@@ -37,6 +40,14 @@ void PowerExp_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
 void RBF_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                 const double* d_X2, int ldx2, int incx2, int stridex2,
                 double* d_C, int ldc, int n, int dim, const std::vector<double> &theta, bool nugget_tag, cudaStream_t stream);
+
+// example of how to use kernel types
+void compute_covariance(const double* d_X1, int ldx1, int incx1, int stridex1,
+                      const double* d_X2, int ldx2, int incx2, int stridex2,
+                      double* d_C, int ldc, int n, int dim, 
+                      const std::vector<double> &theta, const double* range,
+                      bool nugget_tag,
+                      cudaStream_t stream, const Opts &opts);
 
 
 __global__ void norm2_batch_kernel(

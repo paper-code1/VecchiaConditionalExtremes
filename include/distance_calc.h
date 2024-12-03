@@ -10,4 +10,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo>& blockInfos, 
 
 void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<BlockInfo> &receivedBlocks, const Opts& opts, bool pred_tag);
 
+void distanceScale(std::vector<PointMetadata> &localPoints, const std::vector<double>& scale_factor, int dim);
+
+void distanceDeScale(std::vector<BlockInfo> &localPoints, const std::vector<double>& scale_factor, int dim);
 #endif // DISTANCE_CALC_H

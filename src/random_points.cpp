@@ -425,6 +425,16 @@ std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, c
 
         points.push_back(point);
     }
+    // // print first ten observations and coordinates
+    // std::cout << "First ten observations and coordinates:" << std::endl;
+    // for (size_t i = 0; i < std::min(points.size(), static_cast<size_t>(10)); ++i) {
+    //     std::cout << "Observation: " << points[i].observation << ", Coordinates: ";
+    //     for (const auto& coord : points[i].coordinates) {
+    //         std::cout << coord << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    
 
     file.close();
     return points;
