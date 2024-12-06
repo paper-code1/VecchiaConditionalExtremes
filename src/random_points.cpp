@@ -316,7 +316,7 @@ std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int 
     // K-means iterations
     for (int iter = 0; iter < maxIterations; ++iter) {
         // print info for every 10 iterations
-        if (iter % 30 == 0){
+        if (iter % 30 == 0 && rank == 0){
             std::cout << "K-means iteration: " << iter << std::endl;
         }
         // Assign points to the nearest centroid

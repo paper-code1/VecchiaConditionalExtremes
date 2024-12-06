@@ -4,12 +4,13 @@ _USE_MAGMA_?=TRUE
 #specify cuda directory
 _CUDA_ROOT_=$(CUDA_HOME)
 _CUDA_ARCH_ ?= 70
+CUDA_ROOT=$(_CUDA_ROOT_)
 
 #----------------compliers -------------------------
 CXX = mpic++
 NVCC=$(_CUDA_ROOT_)/bin/nvcc
 
-NVOPTS = -ccbin $(CXX) --compiler-options -fno-strict-aliasing --extended-lambda
+NVOPTS = -ccbin $(CXX) --compiler-options -uns --extended-lambda -allow-unsupported-compiler
 CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas -Wunused-variable
 
 ifdef _DEBUG_

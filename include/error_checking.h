@@ -7,6 +7,7 @@
 
 // Updated function to check CUDA errors with file and line information
 #define checkCudaError(error) _checkCudaError(error, __FILE__, __LINE__)
+#define checkMagmaError(error) _checkMagmaError(error, __FILE__, __LINE__)
 
 inline void _checkCudaError(cudaError_t error, const char* file, int line) {
     if (error != cudaSuccess) {
@@ -16,9 +17,10 @@ inline void _checkCudaError(cudaError_t error, const char* file, int line) {
     }
 }
 
-inline void checkMagmaError(magma_int_t error) {
+inline void _checkMagmaError(magma_int_t error, const char* file, int line) {
     if (error != MAGMA_SUCCESS) {
-        std::cerr << "MAGMA error: " << error << " at " << __FILE__ << ":" << __LINE__ << std::endl;
+        std::cerr << "MAGMA error in " << file << ":" << line 
+                  << ": " << magma_strerror(error) << std::endl;
         exit(EXIT_FAILURE);
     }
 }
