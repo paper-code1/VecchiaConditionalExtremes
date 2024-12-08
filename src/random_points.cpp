@@ -147,6 +147,10 @@ void finerPartition(const std::vector<PointMetadata>& metadata, int numBlocksPer
     for (size_t i = 0; i < metadata.size(); ++i) {
         finerPartitions[clusters[i]].push_back(metadata[i]);
     }
+    // print the number of points in each block
+    for (size_t i = 0; i < finerPartitions.size(); ++i) {
+        std::cout << "Block " << i << " has " << finerPartitions[i].size() << " points" << std::endl;
+    }
 }
 
 // Function to calculate centers of gravity for each block (specific for 2D)

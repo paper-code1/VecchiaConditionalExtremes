@@ -18,7 +18,7 @@ inline void _checkCudaError(cudaError_t error, const char* file, int line) {
 }
 
 inline void _checkMagmaError(magma_int_t error, const char* file, int line) {
-    if (error != MAGMA_SUCCESS) {
+    if (error != MAGMA_SUCCESS) {   
         std::cerr << "MAGMA error in " << file << ":" << line 
                   << ": " << magma_strerror(error) << std::endl;
         exit(EXIT_FAILURE);
