@@ -114,6 +114,18 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
             opts.theta_init = {1.0, 0.5, 0.001}; // variance, smoothness, nugget;
             opts.range_offset = 3;
             break;
+        case KernelType::Matern12:
+            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.range_offset = 2;
+            break;
+        case KernelType::Matern32:
+            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.range_offset = 2;
+            break;
+        case KernelType::Matern52:
+            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.range_offset = 2;
+            break;
         case KernelType::Matern72:
             opts.theta_init = {1.0, 0.001}; // variance, nugget;
             opts.range_offset = 2;

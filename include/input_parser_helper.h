@@ -9,17 +9,17 @@
 
 enum class KernelType {
     PowerExponential,
-    // Matern12,
-    // Matern32,
-    // Matern52,
+    Matern12,
+    Matern32,
+    Matern52,
     Matern72
 };
 
 inline KernelType parse_kernel_type(const std::string &kernel_type_str) {
     if (kernel_type_str == "PowerExponential") return KernelType::PowerExponential;
-    // if (kernel_type_str == "Matern12") return KernelType::Matern12;
-    // if (kernel_type_str == "Matern32") return KernelType::Matern32;
-    // if (kernel_type_str == "Matern52") return KernelType::Matern52;
+    if (kernel_type_str == "Matern12") return KernelType::Matern12;
+    if (kernel_type_str == "Matern32") return KernelType::Matern32;
+    if (kernel_type_str == "Matern52") return KernelType::Matern52;
     if (kernel_type_str == "Matern72") return KernelType::Matern72;
     throw std::invalid_argument("Invalid kernel type: " + kernel_type_str);
 }

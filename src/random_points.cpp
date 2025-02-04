@@ -140,17 +140,30 @@ void finerPartition(const std::vector<PointMetadata>& metadata, int numBlocksPer
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     // Perform k-means++ clustering
-    std::vector<int> clusters = kMeansPlusPlus(metadata, numBlocksPerProcess, opts.dim, opts.kmeans_max_iter, rank, opts.seed);
+    std::vector<int> clusters;
+    if (numBlocksPerProcess * 3 < metadata.size()){
+        // block Vecchia
+        clusters = kMeansPlusPlus(metadata, numBlocksPerProcess, opts.dim, opts.kmeans_max_iter, rank, opts.seed);
+    }
+    else{
+        // classic Vecchia
+        clusters.resize(metadata.size());
+        std::iota(clusters.begin(), clusters.end(), 0);
+    }
+    
 
     // std::cout << "Finer partitioning 1" << std::endl;
     // Assign points to clusters
     for (size_t i = 0; i < metadata.size(); ++i) {
         finerPartitions[clusters[i]].push_back(metadata[i]);
     }
-    // print the number of points in each block
-    for (size_t i = 0; i < finerPartitions.size(); ++i) {
-        std::cout << "Block " << i << " has " << finerPartitions[i].size() << " points" << std::endl;
-    }
+    // // print the number of points in each block
+    // if (opts.mode == "prediction"){
+    //     std::cout << metadata.size() << " " << numBlocksPerProcess << std::endl;
+    //     for (size_t i = 0; i < finerPartitions.size(); ++i) {
+    //         std::cout << "Block " << i << " has " << finerPartitions[i].size() << " points" << std::endl;
+    //     }
+    // }
 }
 
 // Function to calculate centers of gravity for each block (specific for 2D)

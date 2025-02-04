@@ -85,6 +85,15 @@ int main(int argc, char **argv)
             case KernelType::Matern72:
                 std::cout << "kernel_type: Matern72" << std::endl;
                 break;
+            case KernelType::Matern12:
+                std::cout << "kernel_type: Matern12" << std::endl;
+                break;
+            case KernelType::Matern32:
+                std::cout << "kernel_type: Matern32" << std::endl;
+                break;
+            case KernelType::Matern52:
+                std::cout << "kernel_type: Matern52" << std::endl;
+                break;
             default:
                 std::cout << "kernel_type: Unsupported" << std::endl;
                 exit(-1);
@@ -288,6 +297,26 @@ int main(int argc, char **argv)
             opts.upper_bounds[0] = 3.0;
             opts.lower_bounds[1] = 0.0; // nugget
             opts.upper_bounds[1] = 0.1;
+            break;
+        case KernelType::Matern12:
+            opts.lower_bounds[0] = 0.01; // sigma2
+            opts.upper_bounds[0] = 3.0;
+            opts.lower_bounds[1] = 0.0; // nugget
+            opts.upper_bounds[1] = 0.1;
+            break;
+        case KernelType::Matern32:
+            opts.lower_bounds[0] = 0.01; // sigma2
+            opts.upper_bounds[0] = 3.0;
+            opts.lower_bounds[1] = 0.0; // nugget
+            opts.upper_bounds[1] = 0.1;
+            break;
+        case KernelType::Matern52:
+            opts.lower_bounds[0] = 0.01; // sigma2
+            opts.upper_bounds[0] = 3.0;
+            opts.lower_bounds[1] = 0.0; // nugget
+            opts.upper_bounds[1] = 0.1;
+            break;
+        default:
             break;
     }
     optimizer.set_lower_bounds(opts.lower_bounds);

@@ -90,6 +90,93 @@ __global__ void Matern72_scaled_matcov_kernel(const double* X1, int ldx1, int in
     }
 }
 
+__global__ void Matern12_scaled_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+                                          const double* X2, int ldx2, int incx2, int stridex2,
+                                          double* C, int ldc, int n, int dim, 
+                                          double sigma2, double nugget, 
+                                          const double* range, bool nugget_tag) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = X1[i * incx1 + k * stridex1];
+            double x2 = X2[j * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        double scaled_distance = sqrt(dist_sqaure);
+        double a0 = 1.0;
+        // double a1 = 1.0;
+        // double a2 = 2.0 / 5.0;
+        // double a3 = 1.0 / 15.0;
+        double item_poly = a0;
+        // + a1 * scaled_distance + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
+        C[i + j * ldc] += nugget;
+    }
+}
+
+__global__ void Matern32_scaled_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+                                          const double* X2, int ldx2, int incx2, int stridex2,
+                                          double* C, int ldc, int n, int dim, 
+                                          double sigma2, double nugget, 
+                                          const double* range, bool nugget_tag) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = X1[i * incx1 + k * stridex1];
+            double x2 = X2[j * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        double scaled_distance = sqrt(dist_sqaure);
+        double a0 = 1.0;
+        double a1 = 1.0;
+        // double a2 = 2.0 / 5.0;
+        // double a3 = 1.0 / 15.0;
+        double item_poly = a0 + a1 * scaled_distance;
+        //  + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
+        C[i + j * ldc] += nugget;
+    }
+}
+
+__global__ void Matern52_scaled_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
+                                          const double* X2, int ldx2, int incx2, int stridex2,
+                                          double* C, int ldc, int n, int dim, 
+                                          double sigma2, double nugget, 
+                                          const double* range, bool nugget_tag) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = X1[i * incx1 + k * stridex1];
+            double x2 = X2[j * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        double scaled_distance = sqrt(dist_sqaure);
+        double a0 = 1.0;
+        double a1 = 1.0;
+        double a2 = 1.0 / 3.0;
+        double item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
+        C[i + j * ldc] += nugget;
+    }
+}
 
 __global__ void Matern72_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
@@ -152,6 +239,41 @@ void Matern72_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex
     Matern72_scaled_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], range, nugget_tag);
 }
 
+void Matern12_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+                const double* d_X2, int ldx2, int incx2, int stridex2,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta,
+                const double* range, bool nugget_tag,
+                cudaStream_t stream) {
+    // Launch kernel
+    dim3 blockDim(16, 16);
+    dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    Matern12_scaled_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], range, nugget_tag);
+}
+
+void Matern32_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+                const double* d_X2, int ldx2, int incx2, int stridex2,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta,
+                const double* range, bool nugget_tag,
+                cudaStream_t stream) {
+    // Launch kernel
+    dim3 blockDim(16, 16);
+    dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    Matern32_scaled_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], range, nugget_tag);
+}   
+
+void Matern52_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
+                const double* d_X2, int ldx2, int incx2, int stridex2,
+                double* d_C, int ldc, int n, int dim, const std::vector<double> &theta,
+                const double* range, bool nugget_tag,
+                cudaStream_t stream) {
+    // Launch kernel
+    dim3 blockDim(16, 16);
+    dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    Matern52_scaled_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], range, nugget_tag);
+}   
 
 void RBF_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
                 const double* d_X2, int ldx2, int incx2, int stridex2,
@@ -349,6 +471,30 @@ void compute_covariance(const double* d_X1, int ldx1, int incx1, int stridex1,
             break;
         case KernelType::Matern72:
             Matern72_scaled_matcov(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                stream);
+            break;
+        case KernelType::Matern52:
+            Matern52_scaled_matcov(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                stream);
+            break;
+        case KernelType::Matern12:
+            Matern12_scaled_matcov(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                stream);
+            break;
+        case KernelType::Matern32:
+            Matern32_scaled_matcov(
                 d_X1, ldx1, incx1, stridex1,
                 d_X2, ldx2, incx2, stridex2,
                 d_C, ldc, n, dim, 
