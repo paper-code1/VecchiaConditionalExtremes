@@ -39,6 +39,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("dim", "Dimension of the problem", cxxopts::value<int>()->default_value("8"))
     ("seed", "Seed for random number generator", cxxopts::value<int>()->default_value("0"))
     ("kmeans_max_iter", "Maximum number of iterations for k-means++", cxxopts::value<int>()->default_value("10"))
+    ("clustering", "Use random/kmeans++ clustering for large datasets", cxxopts::value<std::string>()->default_value("random"))
     ("current_iter", "Current iteration for optimization", cxxopts::value<int>()->default_value("0"))
     ("maxeval", "Maximum number of function evaluations", cxxopts::value<int>()->default_value("5000"))
     ("xtol_rel", "Relative tolerance for optimization", cxxopts::value<double>()->default_value("1e-5"))
@@ -149,6 +150,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.xtol_rel = result["xtol_rel"].as<double>();
     opts.ftol_rel = result["ftol_rel"].as<double>();
     opts.current_iter = result["current_iter"].as<int>();
+    opts.clustering = result["clustering"].as<std::string>();
     opts.mode = result["mode"].as<std::string>();
     if (opts.mode == "performance"){
         opts.print = true;

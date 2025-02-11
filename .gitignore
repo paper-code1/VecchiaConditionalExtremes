@@ -3,6 +3,7 @@ trash/
 .vscode/
 bin/
 obj/
+HST/
 
 *.ipynb
 *.txt

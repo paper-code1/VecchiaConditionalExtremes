@@ -45,6 +45,7 @@ struct Opts
     double distance_threshold;
     // kmeans and optimization
     int kmeans_max_iter;
+    std::string clustering;
     int current_iter;
     int maxeval;
     double xtol_rel;

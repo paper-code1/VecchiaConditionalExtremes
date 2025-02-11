@@ -33,4 +33,7 @@ std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int 
 // Function to read points from CSV files
 std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, const Opts& opts);
 
+// Function to perform random clustering
+std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, int k, int dim, int seed);
+
 #endif // RANDOM_POINTS_H
