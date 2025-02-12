@@ -185,7 +185,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
                 }
             }
         }
-        if (distancesMeta.size() < opts.m){
+        if (distancesMeta.size() < m_nn){
             std::cout << "Warning: Not enough neighbors found for block, random added. " << "m: " << distancesMeta.size() << ", block: " << block.globalOrder << std::endl;
             for (auto& prevBlock: receivedBlocks) {
                 if (prevBlock.globalOrder >= block.globalOrder) {
@@ -256,10 +256,10 @@ void distanceDeScale(std::vector<BlockInfo> &localBlocks, const std::vector<doub
 // Add this function before main()
 double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim_process) {
     // add a factor to account for the non-uniform distirbution
-    int nn_m = m * 100;
+    int nn_m = m * 400;
     // Count dimensions with distance_scale > 1
     int dim = 0;
-    double thres_active = 10.0;
+    double thres_active = 5.0;
     for (double scale : distance_scale) {
         if (scale < thres_active) {
             dim++;
