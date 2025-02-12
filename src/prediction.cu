@@ -14,6 +14,7 @@
 #include <cmath>
 #include <random>
 #include <numeric>
+#include <fstream>
 
 #include "gpu_operations.h"
 #include "gpu_covariance.h"
@@ -21,7 +22,7 @@
 #include "error_checking.h"
 
 // Function to perform prediction on the GPU
-std::pair<double, double> performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts)
+std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -200,42 +201,55 @@ std::pair<double, double> performPredictionOnGPU(const GpuData &gpuData, const s
         double sq_sum = std::inner_product(samples[i].begin(), samples[i].end(), samples[i].begin(), 0.0);
         sample_variances[i] = sq_sum / opts.num_simulations - sample_means[i] * sample_means[i];
     }
-
-    // 6. Calculate MSPE and confidence interval coverage
+    
+    // 6. Calculate MSPE, RMSPE and confidence interval coverage
     
     double local_mspe_sum = 0.0;
+    double local_rmspe_sum = 0.0;
     int local_within_ci = 0;
     
     for (int i = 0; i < gpuData.numPointsPerProcess; ++i) {
         local_mspe_sum += std::pow(sample_means[i] - true_observations[i], 2);
+        // Calculate percentage error for RMSPE
+        if (std::abs(true_observations[i]) > 1e-10) {  // Avoid division by zero
+            local_rmspe_sum += std::pow(100 * (sample_means[i] - true_observations[i]) / true_observations[i], 2);
+        }
+        // print the sample mean and true observation
+        // Save prediction results to CSV file
+        // if (rank == 0) {
+        //     std::ofstream prediction_file("prediction_results.csv", std::ios::app);
+        //     prediction_file << sample_means[i] << "," << true_observations[i] << "," 
+        //                   << (sample_means[i] - true_observations[i])/true_observations[i] * 100 << "\n";
+        //     prediction_file.close();
+        // }
         
         double ci_lower = sample_means[i] - 1.96 * std::sqrt(sample_variances[i]);
         double ci_upper = sample_means[i] + 1.96 * std::sqrt(sample_variances[i]);
-        // double ci_lower = h_means[i] - 1.96 * std::sqrt(h_variances[i]);
-        // double ci_upper = h_means[i] + 1.96 * std::sqrt(h_variances[i]);
         
         if (true_observations[i] >= ci_lower && true_observations[i] <= ci_upper) {
             local_within_ci++;
         }
-        // std::cout << "true_observations["<< i <<"]: " << true_observations[i] << ", predicted mean: " << h_means[i] << ", predicted variance: " << h_variances[i] << ", sample_means["<< i <<"]: " << sample_means[i] << ", sample_variances["<< i <<"]: " << sample_variances[i] << ", ci_lower: " << ci_lower << ", ci_upper: " << ci_upper << std::endl;
     }
     
-    // MPI Allreduce to sum up mspe, within_ci, and point counts across all processes
+    // MPI Allreduce to sum up mspe, rmspe, within_ci, and point counts across all processes
     double global_mspe_sum = 0.0;
+    double global_rmspe_sum = 0.0;
     int global_within_ci = 0;
     MPI_Allreduce(&local_mspe_sum, &global_mspe_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_rmspe_sum, &global_rmspe_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&local_within_ci, &global_within_ci, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-    // Calculate final MSPE and CI coverage
-    // save 16 digits after decimal point for mspe, which will be used for the log file
+    // Calculate final MSPE, RMSPE and CI coverage
     double mspe = std::round(global_mspe_sum / opts.numPointsTotal_test * 1e16) / 1e16;
+    double rmspe = std::sqrt(global_rmspe_sum / opts.numPointsTotal_test); 
     double ci_coverage = static_cast<double>(global_within_ci) / opts.numPointsTotal_test;
 
     // Print results
     if (rank == 0) {
         std::cout << "MSPE: " << mspe << std::endl;
+        std::cout << "RMSPE: " << rmspe << "%" << std::endl;
         std::cout << "95% CI coverage: " << ci_coverage * 100 << "%" << std::endl;
         std::cout << "-------------------Prediction Done-----------------" << std::endl;
     }
-    return std::make_pair(mspe, ci_coverage);
+    return std::make_tuple(mspe, rmspe, ci_coverage);
 }

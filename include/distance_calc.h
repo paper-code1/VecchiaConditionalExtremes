@@ -13,4 +13,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
 void distanceScale(std::vector<PointMetadata> &localPoints, const std::vector<double>& scale_factor, int dim);
 
 void distanceDeScale(std::vector<BlockInfo> &localPoints, const std::vector<double>& scale_factor, int dim);
+
+double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim);
+
 #endif // DISTANCE_CALC_H

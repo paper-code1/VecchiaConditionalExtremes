@@ -112,23 +112,23 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
         switch (opts.kernel_type)
         {
         case KernelType::PowerExponential:
-            opts.theta_init = {1.0, 0.5, 0.001}; // variance, smoothness, nugget;
+            opts.theta_init = {1.0, 0.5, 0.00}; // variance, smoothness, nugget;
             opts.range_offset = 3;
             break;
         case KernelType::Matern12:
-            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00}; // variance, nugget;
             opts.range_offset = 2;
             break;
         case KernelType::Matern32:
-            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00}; // variance, nugget;
             opts.range_offset = 2;
             break;
         case KernelType::Matern52:
-            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00}; // variance, nugget;
             opts.range_offset = 2;
             break;
         case KernelType::Matern72:
-            opts.theta_init = {1.0, 0.001}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00}; // variance, nugget;
             opts.range_offset = 2;
             break;
         default:
@@ -139,8 +139,8 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.theta_init.insert(opts.theta_init.end(), opts.distance_scale_init.begin(), opts.distance_scale_init.end());
     // add the theta_init to the bounds
     for (int i=0; i < opts.theta_init.size(); i++) {
-        opts.lower_bounds.push_back(0.01);
-        opts.upper_bounds.push_back(10);
+        opts.lower_bounds.push_back(opts.theta_init[i] * 0.001);
+        opts.upper_bounds.push_back(opts.theta_init[i] * 10);
     }
     // other options
     opts.kmeans_max_iter = result["kmeans_max_iter"].as<int>();

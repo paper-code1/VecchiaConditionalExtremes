@@ -163,6 +163,8 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
         return a.globalOrder < b.globalOrder;
     });
     int m_nn = (pred_tag) ? opts.m_test : opts.m;
+    // double distance_threshold = (pred_tag) ? opts.distance_threshold * 10 : opts.distance_threshold;
+    double distance_threshold = opts.distance_threshold;
 
     // Perform nearest neighbor search
     #pragma omp parallel for
@@ -177,7 +179,38 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
             }
             for (size_t j = 0; j < prevBlock.blocks.size(); ++j) {
                 double distance = calculateDistance(block.center, prevBlock.blocks[j]);
-                distancesMeta.emplace_back(distance, prevBlock.blocks[j], prevBlock.observations_blocks[j]);
+                // Add all points if the block order is small
+                if (distance < distance_threshold || block.globalOrder <= 700){
+                    distancesMeta.emplace_back(distance, prevBlock.blocks[j], prevBlock.observations_blocks[j]);
+                }
+            }
+        }
+        if (distancesMeta.size() < opts.m){
+            std::cout << "Warning: Not enough neighbors found for block, random added. " << "m: " << distancesMeta.size() << ", block: " << block.globalOrder << std::endl;
+            for (auto& prevBlock: receivedBlocks) {
+                if (prevBlock.globalOrder >= block.globalOrder) {
+                    break;
+                }
+                for (size_t j = 0; j < prevBlock.blocks.size(); ++j) {
+                    // Skip points we've already added
+                    bool already_added = false;
+                    for (const auto& existing : distancesMeta) {
+                        if (std::get<1>(existing) == prevBlock.blocks[j]) {
+                            already_added = true;
+                            break;
+                        }
+                    }
+                    if (!already_added) {
+                        double distance = calculateDistance(block.center, prevBlock.blocks[j]);
+                        distancesMeta.emplace_back(distance, prevBlock.blocks[j], prevBlock.observations_blocks[j]);
+                        if (distancesMeta.size() >= m_nn) {
+                            break;
+                        }
+                    }
+                }
+                if (distancesMeta.size() >= m_nn) {
+                    break;
+                }
             }
         }
 
@@ -218,4 +251,49 @@ void distanceDeScale(std::vector<BlockInfo> &localBlocks, const std::vector<doub
             }
         }
     }
+}
+
+// Add this function before main()
+double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim_process) {
+    // add a factor to account for the non-uniform distirbution
+    int nn_m = m * 100;
+    // Count dimensions with distance_scale > 1
+    int dim = 0;
+    double thres_active = 10.0;
+    for (double scale : distance_scale) {
+        if (scale < thres_active) {
+            dim++;
+        }
+    }
+    // Ensure dim is at least 1 to avoid division by zero
+    dim = std::max(1, dim);
+    // Calculate the volume of the space defined by distance_scale
+    double space_volume = 1.0;
+    for (double scale : distance_scale) {
+        if (scale < thres_active) {
+            space_volume /= scale;
+        }
+    }
+    
+    // Calculate point density (points per unit volume)
+    double point_density = numPointsTotal / space_volume;
+    
+    // Volume of n-dimensional unit ball (hypersphere)
+    double unit_ball_volume;
+    if (dim % 2 == 0) {
+        // Even dimensions
+        unit_ball_volume = pow(M_PI, dim/2) / std::tgamma(dim/2 + 1);
+    } else {
+        // Odd dimensions
+        unit_ball_volume = 2 * pow(M_PI, (dim-1)/2) * std::tgamma((dim+1)/2) / std::tgamma(dim+1);
+    }
+    
+    // Calculate required radius to contain nn_m points on average
+    // V = pi^(d/2) * r^d / Gamma(d/2 + 1)
+    // Solve for r: r = (V * Gamma(d/2 + 1) / pi^(d/2))^(1/d)
+    double required_volume = nn_m / point_density;
+    double radius = pow(required_volume / unit_ball_volume, 1.0/dim);
+    
+    // Add a safety factor (e.g., 1.2) to account for non-uniform distribution
+    return radius * 1.2;
 }

@@ -99,6 +99,7 @@ int main(int argc, char **argv)
                 exit(-1);
                 break;
         }
+        opts.distance_threshold = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim);
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;
@@ -117,6 +118,18 @@ int main(int argc, char **argv)
         std::cout << "Theta: ";
         for (auto theta : opts.theta_init) {
             std::cout << theta << ", ";
+        }
+        std::cout << std::endl;
+        // print the lower bounds
+        std::cout << "Lower bounds: ";
+        for (auto bound : opts.lower_bounds) {
+            std::cout << bound << ", ";
+        }
+        std::cout << std::endl;
+        // print the upper bounds
+        std::cout << "Upper bounds: ";
+        for (auto bound : opts.upper_bounds) {
+            std::cout << bound << ", ";
         }
         std::cout << std::endl;
         std::cout << "----------------------------------------" << std::endl;
@@ -398,6 +411,7 @@ int main(int argc, char **argv)
     // do the prediction for the test points
     GpuData gpuData_test;
     double mspe = -1.0;
+    double rmspe = -1.0;
     double ci_coverage = -1.0;
     // std::vector<double> pre_range_factor(opts.distance_scale.begin(), opts.distance_scale.end());
     // std::vector<double> post_range_factor(optimized_theta.begin() + opts.range_offset, optimized_theta.end());
@@ -409,7 +423,7 @@ int main(int argc, char **argv)
     // }
     if (opts.mode == "prediction") {
         gpuData_test = copyDataToGPU(opts, localBlocks_test);
-        std::tie(mspe, ci_coverage) = performPredictionOnGPU(gpuData_test, optimized_theta, opts);
+        std::tie(mspe, rmspe, ci_coverage) = performPredictionOnGPU(gpuData_test, optimized_theta, opts);
         cleanupGpuMemory(gpuData_test);
     }
 
@@ -425,7 +439,7 @@ int main(int argc, char **argv)
         opts.numBlocksPerProcess, opts.numBlocksTotal, 
         opts.m, 
         opts.seed,
-        mspe, ci_coverage,optimized_theta.data(), -optimized_log_likelihood, opts);
+        mspe, rmspe, ci_coverage,optimized_theta.data(), -optimized_log_likelihood, opts);
     }
     
     MPI_Finalize();
