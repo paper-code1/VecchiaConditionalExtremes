@@ -259,7 +259,7 @@ double calculate_distance_threshold(const std::vector<double>& distance_scale, i
     int nn_m = m * 400;
     // Count dimensions with distance_scale > 1
     int dim = 0;
-    double thres_active = 5.0;
+    double thres_active = 1.0;
     for (double scale : distance_scale) {
         if (scale < thres_active) {
             dim++;
