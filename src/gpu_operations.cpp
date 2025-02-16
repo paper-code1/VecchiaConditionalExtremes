@@ -362,6 +362,7 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                                 theta.data() + range_offset, 
                                 opts.dim * sizeof(double), 
                                 cudaMemcpyHostToDevice));
+    checkCudaError(cudaStreamSynchronize(stream));
 
     // Use the data on the GPU for computation
     // 1. generate the covariance matrix, cross covariance matrix, conditioning covariance matrix
@@ -369,35 +370,59 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // for (size_t k = 0; k < opts.dim; ++k){
     //     magma_dprint_gpu(gpuData.lda_locs_neighbors[1], 1, gpuData.h_locs_neighbors_array[1] + k * gpuData.total_locs_neighbors_num_device, gpuData.ldda_conditioning_cov[1], queue);
     // }
-    for (size_t i = 0; i < batchCount; ++i)
-    {   
-        // print h_locs_array[i]
-        // std::cout << "before cholesky factorization" << std::endl;
-        // magma_dprint_gpu_custom(gpuData.lda_locs[0], opts.dim, gpuData.h_locs_array[0], gpuData.ldda_cov[0], queue, 5);
-        compute_covariance(gpuData.h_locs_array[i],
-                    gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-                    gpuData.h_locs_array[i],
-                    gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-                    gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
-                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-        compute_covariance(gpuData.h_locs_neighbors_array[i], 
-                    gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-                    gpuData.h_locs_array[i],
-                    gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-                    gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
-                    opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-        compute_covariance(gpuData.h_locs_neighbors_array[i],
-                    gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-                    gpuData.h_locs_neighbors_array[i], 
-                    gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-                    gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
-                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-        // Synchronize to make sure the kernel has finished
-        checkCudaError(cudaStreamSynchronize(stream));
-    }    
+    // for (size_t i = 0; i < batchCount; ++i)
+    // {   
+    //     // print h_locs_array[i]
+    //     // std::cout << "before cholesky factorization" << std::endl;
+    //     // magma_dprint_gpu_custom(gpuData.lda_locs[0], opts.dim, gpuData.h_locs_array[0], gpuData.ldda_cov[0], queue, 5);
+    //     compute_covariance(gpuData.h_locs_array[i],
+    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
+    //                 gpuData.h_locs_array[i],
+    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
+    //                 gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
+    //                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    //     compute_covariance(gpuData.h_locs_neighbors_array[i], 
+    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
+    //                 gpuData.h_locs_array[i],
+    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
+    //                 gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
+    //                 opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+    //     compute_covariance(gpuData.h_locs_neighbors_array[i],
+    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
+    //                 gpuData.h_locs_neighbors_array[i], 
+    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
+    //                 gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
+    //                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    //     // Synchronize to make sure the kernel has finished
+    //     checkCudaError(cudaStreamSynchronize(stream));
+    // }    
     // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[0] << std::endl;
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
     // magma_dprint_gpu_custom(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue, 5);
+    
+    compute_covariance_vbatched(gpuData.d_locs_array,
+                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_locs_array,
+                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
+                batchCount,
+                opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    compute_covariance_vbatched(gpuData.d_locs_neighbors_array, 
+                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_array,
+                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
+                batchCount,
+                opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+    compute_covariance_vbatched(gpuData.d_locs_neighbors_array,
+                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_neighbors_array, 
+                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
+                batchCount,
+                opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    // Synchronize to make sure the kernel has finished
+    checkCudaError(cudaStreamSynchronize(stream));
     
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)

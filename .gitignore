@@ -5,10 +5,13 @@ bin/
 obj/
 HST/
 
-*.ipynb
+/*.ipynb
 *.txt
 *.pdf
-*.sh
+/*.sh
 *.csv
+*.out
+*.zip
+*.tar
 
 src/bv-mpi.code-workspace

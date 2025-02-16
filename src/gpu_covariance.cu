@@ -10,6 +10,9 @@
 #define BATCHCOUNT_MAX 65536
 #define THREADS_PER_BLOCK 64
 
+#define THREAD_X (16)
+#define THREAD_Y (16)
+
 // (coalesced memory access)
 __global__ void RBF_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
@@ -54,35 +57,6 @@ __global__ void PowerExp_matcov_scaled_kernel(const double* X1, int ldx1, int in
         double scaled_distance = sqrt(dist_sqaure);
         double power_distance = pow(scaled_distance, smoothness);
         C[i + j * ldc] = sigma2 * exp( - power_distance );
-    }
-    // add nugget
-    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
-        C[i + j * ldc] += nugget;
-    }
-}
-
-__global__ void Matern72_scaled_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
-                                          const double* X2, int ldx2, int incx2, int stridex2,
-                                          double* C, int ldc, int n, int dim, 
-                                          double sigma2, double nugget, 
-                                          const double* range, bool nugget_tag) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
-        double dist_sqaure = 0;
-        for (int k = 0; k < dim; k++) {
-            double x1 = X1[i * incx1 + k * stridex1];
-            double x2 = X2[j * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
-        }
-        double scaled_distance = sqrt(dist_sqaure);
-        double a0 = 1.0;
-        double a1 = 1.0;
-        double a2 = 2.0 / 5.0;
-        double a3 = 1.0 / 15.0;
-        double item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
-        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
     }
     // add nugget
     if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
@@ -178,6 +152,82 @@ __global__ void Matern52_scaled_matcov_kernel(const double* X1, int ldx1, int in
     }
 }
 
+__global__ void Matern72_scaled_matcov_kernel(
+    const double* X1, int ldx1, int incx1, int stridex1,
+    const double* X2, int ldx2, int incx2, int stridex2,
+    double* C, int ldc, int n, int dim, 
+    double sigma2, double nugget, 
+    const double* range, bool nugget_tag) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = X1[i * incx1 + k * stridex1];
+            double x2 = X2[j * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        double scaled_distance = sqrt(dist_sqaure);
+        double a0 = 1.0;
+        double a1 = 1.0;
+        double a2 = 2.0 / 5.0;
+        double a3 = 1.0 / 15.0;
+        double item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
+        C[i + j * ldc] += nugget;
+    }
+}
+
+
+// core kernel for batched matrix generation 
+__device__ void Matern72_scaled_matcov_vbatched_kernel_device(
+    const double* d_X1, int ldx1, int incx1, int stridex1,
+    const double* d_X2, int ldx2, int incx2, int stridex2,
+    double* d_C, int ldc, int n, int dim, 
+    double sigma2, const double* range, 
+    double nugget, bool nugget_tag,
+    int gtx, int gty) {
+    if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        double dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            double x1 = d_X1[gtx * incx1 + k * stridex1];
+            double x2 = d_X2[gty * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        double scaled_distance = sqrt(dist_sqaure);
+        double a0 = 1.0;
+        double a1 = 1.0;
+        double a2 = 2.0 / 5.0;
+        double a3 = 1.0 / 15.0;
+        double item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
+        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (gtx == gty && gtx < ldx1 && gty < ldx2 && nugget_tag) {
+        d_C[gtx + gty * ldc] += nugget;
+    }
+}
+
+// batched matrix generation 
+__global__ void Matern72_scaled_matcov_vbatched_kernel(
+    double** d_X1, const int* ldx1, int incx1, int stridex1,
+    double** d_X2, const int* ldx2, int incx2, int stridex2,
+    double** d_C, const int* ldc, const int* n, int dim, 
+    const double sigma2, const double nugget, const double* range, bool nugget_tag) {
+    // batched id
+    const int batchid = blockIdx.z;
+    const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int gty = blockIdx.y * blockDim.y + threadIdx.y;
+
+    Matern72_scaled_matcov_vbatched_kernel_device(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range, nugget, nugget_tag, gtx, gty);
+}
+
+
+
 __global__ void Matern72_matcov_kernel(const double* X1, int ldx1, int incx1, int stridex1,
                                           const double* X2, int ldx2, int incx2, int stridex2,
                                           double* C, int ldc, int n, int dim, 
@@ -237,6 +287,28 @@ void Matern72_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex
     dim3 gridDim((ldx1 + blockDim.x - 1) / blockDim.x, (ldx2 + blockDim.y - 1) / blockDim.y);
     // theta[0]: variance, theta[1]: nugget, theta[2:]: range
     Matern72_scaled_matcov_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1, ldx1, incx1, stridex1, d_X2, ldx2, incx2, stridex2, d_C, ldc, n, dim, theta[0], theta[1], range, nugget_tag);
+}
+
+// batched version
+void Matern72_scaled_matcov_vbatched(
+    double** d_X1, const int* ldx1, int incx1, int stridex1,
+    double** d_X2, const int* ldx2, int incx2, int stridex2,
+    double** d_C, const int* ldc, const int* n, int dim, const std::vector<double> &theta,
+    const double* range, bool nugget_tag, 
+    int max_ldx1, int max_ldx2,
+    int batchCount, cudaStream_t stream) {
+    // Launch kernel for each single batch
+    dim3 blockDim(THREAD_X, THREAD_Y, 1);
+    const int gridx = ((max_ldx1 + blockDim.x - 1) / blockDim.x);
+    const int gridy = ((max_ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    // for loop over each batch
+    const int max_batch = 65535;
+    for (int i = 0; i < batchCount; i+= max_batch) {
+        int gridz = min(max_batch, batchCount - i);
+        dim3 gridDim(gridx, gridy, gridz);
+        Matern72_scaled_matcov_vbatched_kernel<<<gridDim, blockDim, 0, stream>>>(d_X1 + i, ldx1 + i, incx1, stridex1, d_X2 + i, ldx2 + i, incx2, stridex2, d_C + i, ldc + i, n + i, dim, theta[0], theta[1], range, nugget_tag);
+    }
 }
 
 void Matern12_scaled_matcov(const double* d_X1, int ldx1, int incx1, int stridex1,
@@ -499,6 +571,36 @@ void compute_covariance(const double* d_X1, int ldx1, int incx1, int stridex1,
                 d_X2, ldx2, incx2, stridex2,
                 d_C, ldc, n, dim, 
                 theta, range, nugget_tag,
+                stream);
+            break;
+        default:
+            throw std::runtime_error("Unsupported kernel type");
+            break;
+    }
+}
+
+void compute_covariance_vbatched(double** d_X1, const int* ldx1, int incx1, int stridex1,
+                      double** d_X2, const int* ldx2, int incx2, int stridex2,
+                      double** d_C, const int* ldc, const int* n, 
+                      int batchCount,
+                      int dim, const std::vector<double> &theta, const double* range,
+                      bool nugget_tag,
+                      cudaStream_t stream, const Opts &opts) {
+    // Find max of ldx1 and ldx2 using Thrust
+    thrust::device_ptr<const int> d_ldx1(ldx1);
+    thrust::device_ptr<const int> d_ldx2(ldx2);
+    
+    int max_ldx1 = thrust::reduce(thrust::cuda::par.on(stream), d_ldx1, d_ldx1 + batchCount, 0, thrust::maximum<int>());
+    int max_ldx2 = thrust::reduce(thrust::cuda::par.on(stream), d_ldx2, d_ldx2 + batchCount, 0, thrust::maximum<int>());
+
+    switch (opts.kernel_type) {
+        case KernelType::Matern72:
+            Matern72_scaled_matcov_vbatched(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
                 stream);
             break;
         default:

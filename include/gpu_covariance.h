@@ -49,6 +49,14 @@ void compute_covariance(const double* d_X1, int ldx1, int incx1, int stridex1,
                       bool nugget_tag,
                       cudaStream_t stream, const Opts &opts);
 
+void compute_covariance_vbatched(double** d_X1, const int* ldx1, int incx1, int stridex1,
+                      double** d_X2, const int* ldx2, int incx2, int stridex2,
+                      double** d_C, const int* ldc, const int* n, 
+                      int batchCount,
+                      int dim, const std::vector<double> &theta, const double* range,
+                      bool nugget_tag,
+                      cudaStream_t stream, const Opts &opts);
+
 
 __global__ void norm2_batch_kernel(
     const int* d_lda, const double* const* d_A_array, 
