@@ -48,6 +48,10 @@ struct Opts
     std::string clustering;
     int current_iter;
     int maxeval;
+    int nn_multiplier;
+    // log_append
+    std::string log_append;
+    // optimization
     double xtol_rel;
     double ftol_rel;
     int num_simulations;

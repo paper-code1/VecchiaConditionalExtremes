@@ -254,9 +254,9 @@ void distanceDeScale(std::vector<BlockInfo> &localBlocks, const std::vector<doub
 }
 
 // Add this function before main()
-double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim_process) {
+double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim_process, int nn_multiplier) {
     // add a factor to account for the non-uniform distirbution
-    int nn_m = m * 400;
+    int nn_m = m * nn_multiplier;
     // Count dimensions with distance_scale > 1
     int dim = 0;
     double thres_active = 1.0;

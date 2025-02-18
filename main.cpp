@@ -99,7 +99,7 @@ int main(int argc, char **argv)
                 exit(-1);
                 break;
         }
-        opts.distance_threshold = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim);
+        opts.distance_threshold = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier);
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;

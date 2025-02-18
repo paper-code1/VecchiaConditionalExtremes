@@ -13,7 +13,7 @@ double duration_computation, double duration_candidate_preparation, double durat
         std::filesystem::create_directory(logDir);
     }
     // save the time and gflops to a file with append mode for csv format
-    std::string logFileName = logDir + "/logFile_numPointsTotal" + std::to_string(opts.numPointsTotal) + "_numBlocksPerProcess" + std::to_string(opts.numBlocksPerProcess) + "_m" + std::to_string(opts.m) + "_seed" + std::to_string(opts.seed) + "_isScaled" + std::to_string(is_scaled) + ".csv";
+    std::string logFileName = logDir + "/logFile_numPointsTotal" + std::to_string(opts.numPointsTotal) + "_numBlocksPerProcess" + std::to_string(opts.numBlocksPerProcess) + "_m" + std::to_string(opts.m) + "_seed" + std::to_string(opts.seed) + "_isScaled" + std::to_string(is_scaled) + "_" + opts.log_append + ".csv";
     std::ofstream file(logFileName, std::ios::app);
     // save the mspe in 16 digits after the decimal point
     // std::string mspe_str = std::to_string(mspe);

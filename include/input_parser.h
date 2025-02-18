@@ -47,6 +47,8 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("mode", "Mode type (estimation or prediction or performance)", cxxopts::value<std::string>()->default_value("estimation"))
     ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("1000"))
     ("omp_num_threads", "Number of threads for OpenMP", cxxopts::value<int>()->default_value("20"))
+    ("log_append", "Append to the log file", cxxopts::value<std::string>()->default_value(""))
+    ("nn_multiplier", "Number of nearest neighbors multiplier", cxxopts::value<int>()->default_value("400"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -79,6 +81,8 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.m = result["m"].as<int>();
     opts.m_test = result["m_test"].as<int>();
     opts.distance_threshold = result["distance_threshold"].as<double>();
+    opts.log_append = result["log_append"].as<std::string>();
+    opts.nn_multiplier = result["nn_multiplier"].as<int>();
     // Get the total number of GPUs available on the current node
     int local_gpu_count = 0;
     cudaGetDeviceCount(&local_gpu_count);

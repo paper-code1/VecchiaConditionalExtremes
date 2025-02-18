@@ -14,6 +14,6 @@ void distanceScale(std::vector<PointMetadata> &localPoints, const std::vector<do
 
 void distanceDeScale(std::vector<BlockInfo> &localPoints, const std::vector<double>& scale_factor, int dim);
 
-double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim);
+double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim, int nn_multiplier);
 
 #endif // DISTANCE_CALC_H
