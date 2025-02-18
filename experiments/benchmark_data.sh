@@ -1,17 +1,34 @@
 #!/bin/bash
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=40
+#SBATCH --partition=batch
+#SBATCH -J benchmark_data_vbatched
+#SBATCH -o benchmark_data_vbatched.%J.out
+#SBATCH -e benchmark_data_vbatched.%J.err
+#SBATCH --time=24:00:00
+#SBATCH --gres=gpu:a100:1
+#SBATCH --mem=200G # try larger memory
 
-N=1000000
-N_TEST=100000
-BlockCount=(10000)
-BlockCount_TEST=(20000)
-NN_est=(100 200 200)
+# Set OpenMP environment variables
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export OMP_PROC_BIND=true
+export OMP_PLACES=cores
+
+make clean && make -j
+
+N=1800000
+N_TEST=200000
+BlockCount=(20000)
+BlockCount_TEST=(40000)
+NN_est=(100 200 200) # 300 400
 NN_pred=(400)
 DIM=8
 kernel_type=Matern72
-maxeval=(1000 2000 100)
+maxeval=(1000 2000 100) # 3000 4000
 
 DATA_DIR="./log"
-SPECIES=("H" "N" "O" "O2" "N2" "He" )
+SPECIES=("O2" "N2" "H" "N" "O" "He") # 
 
 for species in ${SPECIES[@]}
 do
@@ -62,10 +79,10 @@ do
                             --kernel_type "$kernel_type"\
                             --seed "$fold"
                         fi
-                        # current_maxeval=1
+                        current_maxeval=1
                     done
                 done    
-    params_path="$DATA_DIR/theta_numPointsTotal1000000_numBlocksPerProcess${bc_est}_m${nn_est}_seed${fold}_isScaled1.csv"
+    params_path="$DATA_DIR/theta_numPointsTotal1800000_numBlocksPerProcess${bc_est}_m${nn_est}_seed${fold}_isScaled1.csv"
 
                 # Read the first line of the CSV file
                 line=$(head -n 1 $params_path)
