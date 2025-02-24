@@ -5,6 +5,8 @@ bin/
 obj/
 HST/
 
+experiments/fig/
+
 /*.ipynb
 *.txt
 *.pdf
@@ -13,5 +15,6 @@ HST/
 *.out
 *.zip
 *.tar
+*.err
 
 src/bv-mpi.code-workspace

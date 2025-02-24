@@ -10,10 +10,10 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mem=200G # try larger memory
 
-# Set OpenMP environment variables
-export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
-export OMP_PROC_BIND=true
-export OMP_PLACES=cores
+# # Set OpenMP environment variables
+# export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+# export OMP_PROC_BIND=true
+# export OMP_PLACES=cores
 
 make clean && make -j
 
@@ -82,7 +82,7 @@ do
                         current_maxeval=1
                     done
                 done    
-    params_path="$DATA_DIR/theta_numPointsTotal1800000_numBlocksPerProcess${bc_est}_m${nn_est}_seed${fold}_isScaled1.csv"
+    params_path="$DATA_DIR/theta_numPointsTotal1800000_numBlocksTotal${bc_est}_m${nn_est}_seed${fold}_isScaled1_.csv"
 
                 # Read the first line of the CSV file
                 line=$(head -n 1 $params_path)

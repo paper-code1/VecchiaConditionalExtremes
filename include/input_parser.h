@@ -90,6 +90,9 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
         std::cerr << "No GPUs found on this node for rank " << rank << std::endl;
         MPI_Finalize();
         return 0;
+    } else if (local_gpu_count > size){
+        std::cerr << "Warning: More GPUs than nodes found on this node for rank " << rank << std::endl;
+        local_gpu_count = size;
     }
     opts.gpu_id = rank % local_gpu_count;
     cudaSetDevice(opts.gpu_id);
