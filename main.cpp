@@ -199,9 +199,9 @@ int main(int argc, char **argv)
     auto start_finer_partitioning = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<PointMetadata>> finerPartitions;
     std::vector<std::vector<PointMetadata>> finerPartitions_test;
-    finerPartition(localPoints_out_partitioned, opts.numBlocksTotal, finerPartitions, opts);
+    finerPartition(localPoints_out_partitioned, opts.numBlocksPerProcess, finerPartitions, opts);
     if (opts.mode == "prediction"){
-        finerPartition(localPoints_out_partitioned_test, opts.numBlocksTotal, finerPartitions_test, opts);
+        finerPartition(localPoints_out_partitioned_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_finer_partitioning = std::chrono::high_resolution_clock::now();

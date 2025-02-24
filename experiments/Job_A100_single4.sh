@@ -15,6 +15,8 @@ N_all=(10000 20000 50000 80000 100000 200000 500000 800000 1000000 2000000 30000
 N_bs=(100)
 M_ests=(400)
 
+export OMP_NUM_THREADS=10
+
 DIM=10
 theta_init=1.0,0.001
 distance_scale=0.05,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
@@ -28,11 +30,11 @@ for N in ${N_all[@]}; do
                 bc=$((N/N_b))
                 m_bv=$M_est
                 echo "N: $N, bc: $bc, m_bv: $m_bv"
-                srun ./bin/dbv --num_total_points $N --num_total_blocks $bc -m $m_bv --dim $DIM --mode estimation --maxeval 1 --kernel_type Matern72 --seed $i --nn_multiplier 10 --log_append A100_single4
+                srun ./bin/dbv --num_total_points $N --num_total_blocks $bc -m $m_bv --dim $DIM --mode estimation --maxeval 1 --kernel_type Matern72 --seed $i --nn_multiplier 10 --log_append A100_single4 --omp_num_threads 10
             done
         done
     done
 done
 
 mkdir -p ./log/A100_single4
-mv ./log/*A100_single4.csv ./log/A100_single4/
+mv ./log/*_A100_single4.csv ./log/A100_single4/

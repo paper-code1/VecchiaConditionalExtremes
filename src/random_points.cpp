@@ -132,76 +132,32 @@ void partitionPoints(const std::vector<PointMetadata> &localMetadata, std::vecto
 
 // Function to perform random clustering
 std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, int k, int dim, int seed) {
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    int numPoints = metadata.size();
+    std::vector<int> clusters(numPoints);
     
-    int localNumPoints = metadata.size();
-    std::vector<int> clusters(localNumPoints);
+    // Initialize random number generator
+    std::mt19937 gen(seed);
     
-    // 1. Generate k random centers from local metadata
-    std::vector<std::vector<double>> local_centers;
-    std::vector<int> center_origins;  // Store which rank generated each center
-    if (localNumPoints > 0) {
-        std::mt19937 gen(seed + rank);
-        std::vector<int> indices(localNumPoints);
-        std::iota(indices.begin(), indices.end(), 0);
-        std::shuffle(indices.begin(), indices.end(), gen);
-        
-        // Select k/size centers (or k/size + 1 for some ranks)
-        int centers_per_process = k / size;
-        int remainder = k % size;
-        int local_k = centers_per_process + (rank < remainder ? 1 : 0);
-        
-        for (int i = 0; i < local_k && i < localNumPoints; ++i) {
-            local_centers.push_back(metadata[indices[i]].coordinates);
-            center_origins.push_back(rank);  // Mark this center as coming from this rank
-        }
-    }
-
-    // 2. All-to-all communication to share centers and their origins
-    // First, gather how many centers each process has
-    std::vector<int> recvcounts(size);
-    int local_centers_count = local_centers.size() * (dim + 1);  // +1 for origin rank
-    MPI_Allgather(&local_centers_count, 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
-
-    // Calculate displacements
-    std::vector<int> displs(size, 0);
-    for (int i = 1; i < size; ++i) {
-        displs[i] = displs[i-1] + recvcounts[i-1];
-    }
-
-    // Flatten local centers and origins for gathering
-    std::vector<double> local_data_flat;
-    for (size_t i = 0; i < local_centers.size(); ++i) {
-        local_data_flat.insert(local_data_flat.end(), local_centers[i].begin(), local_centers[i].end());
-        local_data_flat.push_back(static_cast<double>(center_origins[i]));
-    }
-
-    // Gather all centers and their origins
-    std::vector<double> all_data_flat(k * (dim + 1));
-    MPI_Allgatherv(local_data_flat.data(), local_centers_count, MPI_DOUBLE,
-                   all_data_flat.data(), recvcounts.data(), displs.data(),
-                   MPI_DOUBLE, MPI_COMM_WORLD);
-
-    // Convert flat array back to centers and origins
-    std::vector<std::vector<double>> centers(k, std::vector<double>(dim));
-    std::vector<int> center_ranks(k);
+    // 1. Randomly select k centers without replacement
+    std::vector<std::vector<double>> centers(k);
+    std::vector<int> centerIndices(numPoints);
+    std::iota(centerIndices.begin(), centerIndices.end(), 0);
+    
+    // Shuffle and take first k indices
+    std::shuffle(centerIndices.begin(), centerIndices.end(), gen);
     for (int i = 0; i < k; ++i) {
-        for (int d = 0; d < dim; ++d) {
-            centers[i][d] = all_data_flat[i * (dim + 1) + d];
-        }
-        center_ranks[i] = static_cast<int>(all_data_flat[i * (dim + 1) + dim]);
+        centers[i] = metadata[centerIndices[i]].coordinates;
+        clusters[centerIndices[i]] = i;
     }
-
-    // 3. Find closest centers and prepare data for sending to center owners
-    std::vector<std::vector<int>> points_to_send(size);  // Points to send to each rank
-    std::vector<std::vector<double>> coords_to_send(size);  // Coordinates to send to each rank
     
+    // 2. Assign remaining points to nearest center
     #pragma omp parallel for schedule(static)
-    for (int i = 0; i < localNumPoints; ++i) {
+    for (int i = 0; i < numPoints; ++i) {
+        // Skip if this point is a center
+        if (i < k && i == centerIndices[i]) continue;
+        
         double minDist = std::numeric_limits<double>::max();
-        int nearestCenter = 0;
+        int nearestCluster = 0;
         
         // Find nearest center
         for (int j = 0; j < k; ++j) {
@@ -213,61 +169,13 @@ std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, in
             
             if (dist < minDist) {
                 minDist = dist;
-                nearestCenter = j;
+                nearestCluster = j;
             }
         }
         
-        int targetRank = center_ranks[nearestCenter];
-        clusters[i] = nearestCenter;  // Store temporary cluster assignment
-        
-        // If point belongs to another rank's center, prepare to send it
-        if (targetRank != rank) {
-            #pragma omp critical
-            {
-                points_to_send[targetRank].push_back(i);
-                coords_to_send[targetRank].insert(
-                    coords_to_send[targetRank].end(),
-                    metadata[i].coordinates.begin(),
-                    metadata[i].coordinates.end()
-                );
-            }
-        }
+        clusters[i] = nearestCluster;
     }
-
-    // All-to-all communication for point assignments
-    // First, exchange sizes
-    std::vector<int> send_sizes(size), recv_sizes(size);
-    for (int i = 0; i < size; ++i) {
-        send_sizes[i] = points_to_send[i].size() * (dim + 1);  // coordinates + point index
-    }
-    MPI_Alltoall(send_sizes.data(), 1, MPI_INT, recv_sizes.data(), 1, MPI_INT, MPI_COMM_WORLD);
-
-    // Send points to their center owners
-    for (int i = 0; i < size; ++i) {
-        if (i != rank && send_sizes[i] > 0) {
-            MPI_Send(points_to_send[i].data(), points_to_send[i].size(), MPI_INT, i, 0, MPI_COMM_WORLD);
-            MPI_Send(coords_to_send[i].data(), coords_to_send[i].size(), MPI_DOUBLE, i, 1, MPI_COMM_WORLD);
-        }
-    }
-
-    // Receive points from other ranks and update cluster assignments
-    for (int i = 0; i < size; ++i) {
-        if (i != rank && recv_sizes[i] > 0) {
-            std::vector<int> received_points(recv_sizes[i] / (dim + 1));
-            std::vector<double> received_coords(recv_sizes[i] - received_points.size());
-            
-            MPI_Recv(received_points.data(), received_points.size(), MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Recv(received_coords.data(), received_coords.size(), MPI_DOUBLE, i, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            // Process received points and update their cluster assignments
-            for (size_t j = 0; j < received_points.size(); ++j) {
-                // Here you might want to do additional processing or verification
-                // before final cluster assignment
-                clusters[received_points[j]] = j;  // Assign final cluster
-            }
-        }
-    }
-
+    
     return clusters;
 }
 

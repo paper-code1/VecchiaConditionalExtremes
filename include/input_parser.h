@@ -83,21 +83,39 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.distance_threshold = result["distance_threshold"].as<double>();
     opts.log_append = result["log_append"].as<std::string>();
     opts.nn_multiplier = result["nn_multiplier"].as<int>();
+    // Get local rank within the node using MPI
+    MPI_Comm node_comm;
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, &node_comm);
+    int local_rank, local_size;
+    MPI_Comm_rank(node_comm, &local_rank);
+    MPI_Comm_size(node_comm, &local_size);
+
     // Get the total number of GPUs available on the current node
     int local_gpu_count = 0;
     cudaGetDeviceCount(&local_gpu_count);
     if (local_gpu_count == 0) {
         std::cerr << "No GPUs found on this node for rank " << rank << std::endl;
+        MPI_Comm_free(&node_comm);
         MPI_Finalize();
-        return 0;
-    } else if (local_gpu_count > size){
-        std::cerr << "Warning: More GPUs than nodes found on this node for rank " << rank << std::endl;
-        local_gpu_count = size;
+        return false;
     }
-    opts.gpu_id = rank % local_gpu_count;
+
+    // If there are more ranks than GPUs, multiple ranks will share each GPU
+    if (local_size > local_gpu_count && rank == 0) {
+        std::cout << "Warning: " << local_size << " ranks will share " << local_gpu_count 
+                 << " GPUs on each node (approximately " 
+                 << local_size / local_gpu_count + (local_size % local_gpu_count > 0) 
+                 << " ranks per GPU)" << std::endl;
+    }
+
+    // Assign GPU based on local rank instead of global rank
+    opts.gpu_id = local_rank % local_gpu_count;
     cudaSetDevice(opts.gpu_id);
     magma_queue_create(opts.gpu_id, &opts.queue);
     opts.stream = magma_queue_get_cuda_stream(opts.queue);
+
+    MPI_Comm_free(&node_comm);
+
     opts.seed = result["seed"].as<int>();
     opts.dim = result["dim"].as<int>();
     opts.omp_num_threads = result["omp_num_threads"].as<int>();
