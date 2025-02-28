@@ -6,7 +6,7 @@
 #SBATCH -J 1node_2gpu_a100
 #SBATCH -o 1node_2gpu_a100.%J.out
 #SBATCH -e 1node_2gpu_a100.%J.err
-#SBATCH --time=02:00:00
+#SBATCH --time=6:00:00
 #SBATCH --gres=gpu:a100:2
 #SBATCH --constraint=a100,4gpus
 #SBATCH --mem=300G 
@@ -30,7 +30,7 @@ for N in ${N_all[@]}; do
                 bc=$((N/N_b))
                 m_bv=$M_est
                 echo "N: $N, bc: $bc, m_bv: $m_bv"
-                srun ./bin/dbv --num_total_points $N --num_total_blocks $bc -m $m_bv --dim $DIM --mode estimation --maxeval 1 --kernel_type Matern72 --seed $i --nn_multiplier 10 --log_append A100_single2 --omp_num_threads 10
+                srun --exclusive --cpu-bind=none --cpus-per-task=10 ./bin/dbv --num_total_points $N --num_total_blocks $bc -m $m_bv --dim $DIM --mode estimation --maxeval 1 --kernel_type Matern72 --seed $i --nn_multiplier 10 --log_append A100_single2 --omp_num_threads 10
             done
         done
     done

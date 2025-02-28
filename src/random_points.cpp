@@ -151,29 +151,50 @@ std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, in
     }
     
     // 2. Assign remaining points to nearest center
-    #pragma omp parallel for schedule(static)
-    for (int i = 0; i < numPoints; ++i) {
-        // Skip if this point is a center
-        if (i < k && i == centerIndices[i]) continue;
+    #pragma omp parallel
+    {
+        // Thread-local storage for centers to improve cache utilization
+        std::vector<std::vector<double>> local_centers = centers;
         
-        double minDist = std::numeric_limits<double>::max();
-        int nearestCluster = 0;
-        
-        // Find nearest center
-        for (int j = 0; j < k; ++j) {
-            double dist = 0.0;
-            for (int d = 0; d < dim; ++d) {
-                double diff = metadata[i].coordinates[d] - centers[j][d];
-                dist += diff * diff;
+        #pragma omp for schedule(dynamic, 64)
+        for (int i = 0; i < numPoints; ++i) {
+            // Skip if this point is a center
+            if (i < k && i == centerIndices[i]) continue;
+            
+            double minDist = std::numeric_limits<double>::max();
+            int nearestCluster = 0;
+            
+            // Find nearest center
+            for (int j = 0; j < k; ++j) {
+                double dist = 0.0;
+                const auto& center = local_centers[j];
+                const auto& point = metadata[i].coordinates;
+                
+                // Manual loop unrolling for better vectorization
+                for (int d = 0; d < dim; d += 4) {
+                    if (d + 3 < dim) {
+                        double diff0 = point[d] - center[d];
+                        double diff1 = point[d+1] - center[d+1];
+                        double diff2 = point[d+2] - center[d+2];
+                        double diff3 = point[d+3] - center[d+3];
+                        dist += diff0 * diff0 + diff1 * diff1 + 
+                               diff2 * diff2 + diff3 * diff3;
+                    } else {
+                        for (int r = d; r < dim; ++r) {
+                            double diff = point[r] - center[r];
+                            dist += diff * diff;
+                        }
+                    }
+                }
+                
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestCluster = j;
+                }
             }
             
-            if (dist < minDist) {
-                minDist = dist;
-                nearestCluster = j;
-            }
+            clusters[i] = nearestCluster;
         }
-        
-        clusters[i] = nearestCluster;
     }
     
     return clusters;

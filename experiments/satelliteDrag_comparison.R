@@ -99,4 +99,8 @@ for(i.s in 1:length(species)){
       
     }
   }
+  print(paste0("=============MSPE of ",species[i.s],"============="))
+  print(paste0("SVecchia: ",mean(mse[1,i.s,2,])))
+  print(paste0("CVecchia: ",mean(mse[2,i.s,2,])))
+  print("=============================")
 }
