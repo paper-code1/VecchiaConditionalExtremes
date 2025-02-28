@@ -186,11 +186,11 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
-    // find the maximum duration_preprocessing
-    double avg_outer_partitioning;
+    
+    // Find the maximum preprocessing duration across all processes
+    double max_outer_partitioning;
     double duration_preprocessing_seconds = duration_preprocessing.count();
-    MPI_Allreduce(&duration_preprocessing_seconds, &avg_outer_partitioning, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_outer_partitioning /= size;
+    MPI_Allreduce(&duration_preprocessing_seconds, &max_outer_partitioning, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // 2.2 Perform finer partitioning within each processor
     if (rank == 0){
@@ -206,39 +206,74 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_finer_partitioning = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_finer_partitioning = end_finer_partitioning - start_finer_partitioning;
-    double avg_duration_finer_partitioning;
+    double max_duration_finer_partitioning;
     double duration_finer_partitioning_seconds = duration_finer_partitioning.count();
-    MPI_Allreduce(&duration_finer_partitioning_seconds, &avg_duration_finer_partitioning, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_finer_partitioning /= size;
+    MPI_Allreduce(&duration_finer_partitioning_seconds, &max_duration_finer_partitioning, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
 
     // 2.3 Calculate centers of gravity for each block
     if (rank == 0){
         std::cout << "Calculating centers of gravity" << std::endl;
     }
+    auto start_centers_of_gravity = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<double>> centers = calculateCentersOfGravity(finerPartitions, opts);
     std::vector<std::vector<double>> centers_test;
     if (opts.mode == "prediction"){
         centers_test = calculateCentersOfGravity(finerPartitions_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
+    auto end_centers_of_gravity = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_centers_of_gravity = end_centers_of_gravity - start_centers_of_gravity;
+    double max_duration_centers_of_gravity;
+    double duration_centers_of_gravity_seconds = duration_centers_of_gravity.count();
+    MPI_Allreduce(&duration_centers_of_gravity_seconds, &max_duration_centers_of_gravity, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
     // 2.4 Send centers of gravity to processor 0
+    auto start_send_centers_of_gravity = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<double>> allCenters;
     sendCentersOfGravityToRoot(centers, allCenters, opts);
-    // 3. Reorder centers at processor 0
-    reorderCenters(allCenters, opts);
+    auto end_send_centers_of_gravity = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_send_centers_of_gravity = end_send_centers_of_gravity - start_send_centers_of_gravity;
+    double max_duration_send_centers_of_gravity;
+    double duration_send_centers_of_gravity_seconds = duration_send_centers_of_gravity.count();
+    MPI_Allreduce(&duration_send_centers_of_gravity_seconds, &max_duration_send_centers_of_gravity, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
+    
+    // 3. Reorder centers at processor 0
+    auto start_reorder_centers = std::chrono::high_resolution_clock::now();
+    reorderCenters(allCenters, opts);
+    auto end_reorder_centers = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_reorder_centers = end_reorder_centers - start_reorder_centers;
+    double max_duration_reorder_centers;
+    double duration_reorder_centers_seconds = duration_reorder_centers.count();
+    MPI_Allreduce(&duration_reorder_centers_seconds, &max_duration_reorder_centers, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
+    
     // 3.1 Broadcast reordered centers to all processors
+    auto start_broadcast_centers = std::chrono::high_resolution_clock::now();
     int numCenters = allCenters.size();
     MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
     broadcastCenters(allCenters, numCenters, opts);
+    auto end_broadcast_centers = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_broadcast_centers = end_broadcast_centers - start_broadcast_centers;
+    double max_duration_broadcast_centers;
+    double duration_broadcast_centers_seconds = duration_broadcast_centers.count();
+    MPI_Allreduce(&duration_broadcast_centers_seconds, &max_duration_broadcast_centers, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
+
     // 4. NN searching
     // 4.1 Create block information
+    auto start_create_block_info = std::chrono::high_resolution_clock::now();
     std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, opts);
     std::vector<BlockInfo> localBlocks_test;
     if (opts.mode == "prediction"){
         localBlocks_test = createBlockInfo_test(finerPartitions_test, centers_test, opts);
     }
+    auto end_create_block_info = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_create_block_info = end_create_block_info - start_create_block_info;
+    double max_duration_create_block_info;
+    double duration_create_block_info_seconds = duration_create_block_info.count();
+    MPI_Allreduce(&duration_create_block_info_seconds, &max_duration_create_block_info, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
 
     // 4.2 Block candidate preparation
@@ -248,10 +283,10 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_block_sending = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_block_sending = end_block_sending - start_block_sending;
-    double avg_duration_candidate_preparation;
+    double max_duration_block_sending;
     double duration_block_sending_seconds = duration_block_sending.count();
-    MPI_Allreduce(&duration_block_sending_seconds, &avg_duration_candidate_preparation, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_candidate_preparation /= size;
+    MPI_Allreduce(&duration_block_sending_seconds, &max_duration_block_sending, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     // 4.3 NN searching
     if (rank == 0){
@@ -262,28 +297,28 @@ int main(int argc, char **argv)
     if (opts.mode == "prediction"){
         nearest_neighbor_search(localBlocks_test, receivedBlocks, opts, true);
     }
-
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_nn_searching = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_nn_searching = end_nn_searching - start_nn_searching;
-    double avg_duration_nn_searching;
+    double max_duration_nn_searching;
     double duration_nn_searching_seconds = duration_nn_searching.count();
-    MPI_Allreduce(&duration_nn_searching_seconds, &avg_duration_nn_searching, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_nn_searching /= size;
+    MPI_Allreduce(&duration_nn_searching_seconds, &max_duration_nn_searching, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     // descale
     distanceDeScale(localBlocks, opts.distance_scale, opts.dim);
     if (opts.mode == "prediction"){
         distanceDeScale(localBlocks_test, opts.distance_scale, opts.dim);
     }
-
-    // free the memory of receivedBlocks
-    // receivedBlocks.clear();
-    MPI_Barrier(MPI_COMM_WORLD);
     // 5. independent computation of log-likelihood
-    
+    auto start_gpu_copy = std::chrono::high_resolution_clock::now();
     // Step 1: Copy data to GPU
     GpuData gpuData = copyDataToGPU(opts, localBlocks);
+    auto end_gpu_copy = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_gpu_copy = end_gpu_copy - start_gpu_copy;
+    double max_duration_gpu_copy;
+    double duration_gpu_copy_seconds = duration_gpu_copy.count();
+    MPI_Allreduce(&duration_gpu_copy_seconds, &max_duration_gpu_copy, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // // calculate the tota flops
     double total_gflops = gflopsTotal(gpuData, opts);
@@ -347,7 +382,7 @@ int main(int argc, char **argv)
     optimizer.set_min_objective(objective_function, &opt_data);
 
     // print the config of optimizer
-    if (rank == 0){
+    if (rank == 0 && opts.mode != "performance"){
         std::cout << "Optimizer dimension: " << optimizer.get_dimension() << std::endl;
         std::cout << "Optimizer lower bounds: ";
         for (auto bound : opts.lower_bounds) {
@@ -391,22 +426,30 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_computation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_computation = end_computation - start_computation;
-    double avg_duration_computation;
+    double max_duration_computation;
     double duration_computation_seconds = duration_computation.count();
-    MPI_Allreduce(&duration_computation_seconds, &avg_duration_computation, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_computation /= size;
+    MPI_Allreduce(&duration_computation_seconds, &max_duration_computation, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
+
     if (rank == 0 && opts.mode != "performance"){
         std::cout << "-------------------Estimation Done-----------------" << std::endl;
     }
     // Step 3: Cleanup GPU memory
+    auto start_cleanup_gpu = std::chrono::high_resolution_clock::now();
     cleanupGpuMemory(gpuData);
+    auto end_cleanup_gpu = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_cleanup_gpu = end_cleanup_gpu - start_cleanup_gpu;
+    double max_duration_cleanup_gpu;
+    double duration_cleanup_gpu_seconds = duration_cleanup_gpu.count();
+    MPI_Allreduce(&duration_cleanup_gpu_seconds, &max_duration_cleanup_gpu, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     auto end_total = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_total = end_total - start_total;
     double duration_total_seconds = duration_total.count();
-    double avg_duration_total;
-    MPI_Allreduce(&duration_total_seconds, &avg_duration_total, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    avg_duration_total /= size;
+    double max_duration_total;
+    MPI_Allreduce(&duration_total_seconds, &max_duration_total, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
     
     // do the prediction for the test points
     GpuData gpuData_test;
@@ -431,15 +474,21 @@ int main(int argc, char **argv)
     // save the time and gflops to a file
     MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
-        saveTimeAndGflops(avg_outer_partitioning, avg_duration_finer_partitioning, 
-        avg_duration_computation, avg_duration_candidate_preparation, 
-        avg_duration_nn_searching, avg_duration_total,
-        total_gflops, 
-        opts.numPointsPerProcess, opts.numPointsTotal, 
-        opts.numBlocksPerProcess, opts.numBlocksTotal, 
-        opts.m, 
-        opts.seed,
-        mspe, rmspe, ci_coverage,optimized_theta.data(), -optimized_log_likelihood, opts);
+        saveTimeAndGflops(
+            max_outer_partitioning, max_duration_finer_partitioning, 
+            max_duration_centers_of_gravity, max_duration_send_centers_of_gravity, 
+            max_duration_reorder_centers, max_duration_broadcast_centers, 
+            max_duration_create_block_info, max_duration_block_sending, 
+            max_duration_nn_searching, 
+            max_duration_gpu_copy, max_duration_computation,
+            max_duration_cleanup_gpu,
+            max_duration_total,
+            total_gflops, 
+            opts.numPointsPerProcess, opts.numPointsTotal, 
+            opts.numBlocksPerProcess, opts.numBlocksTotal, 
+            opts.m, 
+            opts.seed,
+            mspe, rmspe, ci_coverage,optimized_theta.data(), -optimized_log_likelihood, opts);
     }
     
     MPI_Finalize();

@@ -99,20 +99,16 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
         }
 
         // Calculate distance to future global centers and check against threshold
-        #pragma omp parallel for schedule(dynamic)
         for (int j = globalOrder + 1; j < numBlocks; ++j)
         {
             double distance = calculateDistance(blockInfo.center, allCenters[j]);
             if (distance < distance_threshold)
             {
-                #pragma omp critical
+                int dest = std::min(static_cast<int>(allCenters[j][0] * size), size - 1);
+                if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end())
                 {
-                    int dest = std::min(static_cast<int>(allCenters[j][0] * size), size - 1);
-                    if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end())
-                    {
-                        sendBuffers[dest].push_back(blockInfo);
-                        blockIndexSets[dest].insert(globalOrder);
-                    }
+                    sendBuffers[dest].push_back(blockInfo);
+                    blockIndexSets[dest].insert(globalOrder);
                 }
             }
         }
