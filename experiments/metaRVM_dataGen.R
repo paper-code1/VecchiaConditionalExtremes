@@ -114,6 +114,11 @@ results <- do.call(rbind, results_list)
 # Trim excess rows if any
 results <- results[1:n_samples,]
 
+# Calculate standard deviation of the output (column 11)
+output_sd <- sd(results[,11])
+# Divide output by its standard deviation and add 1
+results[,11] <- (results[,11] / output_sd) + 1
+
 # After generating results matrix, normalize inputs (first 10 columns)
 # Create normalization function to scale to [0,1]
 normalize <- function(x, min_val, max_val) {
@@ -151,15 +156,15 @@ test_data <- results[(n_train+1):nrow(results),]
 
 # Save training and testing data
 # make folder
-dir.create("../metaRVMdata")
+dir.create("./metaRVMdata")
 write.table(train_data, 
-            file = "../metaRVMdata/train_data.txt", 
+            file = "./metaRVMdata/train_data.txt", 
             row.names = FALSE, 
             col.names = FALSE, 
-            sep = " ")
+            sep = ",")
 
 write.table(test_data, 
-            file = "../metaRVMdata/test_data.txt", 
+            file = "./metaRVMdata/test_data.txt", 
             row.names = FALSE, 
             col.names = FALSE, 
-            sep = " ")
+            sep = ",")
