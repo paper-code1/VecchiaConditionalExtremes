@@ -423,6 +423,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
     // Synchronize to make sure the kernel has finished
     checkCudaError(cudaStreamSynchronize(stream));
+
+    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
     
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)

@@ -10,7 +10,7 @@
 #SBATCH --gres=gpu:v100:1
 #SBATCH --mem=200G # try larger memory
 
-make clean && make -j
+# make clean && make -j
 
 N=900000
 N_TEST=100000
@@ -40,6 +40,7 @@ do
         echo "nn_est: $nn_est"
         # Get corresponding maxeval value using index
         current_maxeval=${maxeval[$index]}
+        echo "current_maxeval: $current_maxeval"
         for bc_pred in ${BlockCount_TEST[@]}
         do
             echo "bc_pred: $bc_pred"
@@ -49,7 +50,7 @@ do
                 # Skip first iteration, run others
                 if [ $index -ne -1 ]; then
                     # Update maxeval parameter to use current_maxeval
-                    srun ./bin/dbv --num_total_points "$N" \
+                    ./bin/dbv --num_total_points "$N" \
                     --num_total_points_test "$N_TEST" \
                     --num_total_blocks "$bc_est" \
                     --num_total_blocks_test "$bc_pred" \

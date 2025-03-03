@@ -185,7 +185,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
                 }
             }
         }
-        if (distancesMeta.size() < m_nn){
+        if (distancesMeta.size() < m_nn && block.globalOrder > 0){
             std::cout << "Warning: Not enough neighbors found for block, random added. " << "m: " << distancesMeta.size() << ", block: " << block.globalOrder << std::endl;
             for (auto& prevBlock: receivedBlocks) {
                 if (prevBlock.globalOrder >= block.globalOrder) {
