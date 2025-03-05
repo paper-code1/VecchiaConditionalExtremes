@@ -81,12 +81,14 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     std::vector<std::set<int>> blockIndexSets(size);
     std::vector<std::vector<BlockInfo>> sendBuffers(size);
 
+    int m_const = (opts.numBlocksTotal == opts.numPointsTotal) ? 300 : 42;
+
     for (const auto &blockInfo : blockInfos)
     {
         int globalOrder = blockInfo.globalOrder;
 
         // Send first 10 blocks to all processors
-        if (globalOrder < 10)
+        if (globalOrder < m_const)
         {
             for (int dest = 0; dest < size; ++dest)
             {
@@ -165,7 +167,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
     int m_nn = (pred_tag) ? opts.m_test : opts.m;
     // double distance_threshold = (pred_tag) ? opts.distance_threshold * 10 : opts.distance_threshold;
     double distance_threshold = opts.distance_threshold;
-
+    
     // Perform nearest neighbor search
     #pragma omp parallel for
     for (size_t i = 0; i < blockInfos.size(); ++i) {
@@ -213,7 +215,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
                 }
             }
         }
-
+        
         // Sort distances and keep the m nearest neighbors
         std::sort(distancesMeta.begin(), distancesMeta.end(), [](const auto& a, const auto& b) {
             return std::get<0>(a) < std::get<0>(b);
