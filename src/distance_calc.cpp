@@ -187,6 +187,10 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
                 }
             }
         }
+        // add cases for the classic Vecchia
+        if (block.globalOrder <= m_nn && block.blocks.size() == 1){
+            continue;
+        }
         if (distancesMeta.size() < m_nn && block.globalOrder > 0){
             std::cout << "Warning: Not enough neighbors found for block, random added. " << "m: " << distancesMeta.size() << ", block: " << block.globalOrder << std::endl;
             for (auto& prevBlock: receivedBlocks) {

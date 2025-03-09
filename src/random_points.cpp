@@ -476,18 +476,12 @@ std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, c
 
         // Read coordinates
         for (int j = 0; j < opts.dim; ++j) {
-            if (!std::getline(lineStream, value, ' ')) {
-                // Try comma-space if space delimiter fails
-                lineStream.clear();
-                lineStream.seekg(-(value.length() + 1), std::ios::cur); // Reset to start of current value
-                if (!std::getline(lineStream, value, ',')) {
-                    std::cerr << "Error: Invalid data format in file at row " << i << std::endl;
-                    continue;
-                }
-                // Skip the space after comma if present
-                lineStream.get();
+            if (std::getline(lineStream, value, ',') || std::getline(lineStream, value, ' ')) {
+                point.coordinates[j] = std::stod(value);
+            } else {
+                std::cerr << "Error: Invalid data format in file at row " << i << std::endl;
+                continue;
             }
-            point.coordinates[j] = std::stod(value);
         }
 
         // Read observation (last column)
