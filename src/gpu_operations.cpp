@@ -567,7 +567,7 @@ double gflopsTotal(const GpuData &gpuData, const Opts &opts)
     for (size_t i = 0; i < batchCount; ++i)
     {
         // 1. matrix generation
-        gflops += (3 * opts.dim + 3) * (gpuData.lda_locs[i] * gpuData.lda_locs[i] + 
+        gflops += (3 * opts.dim + 11) * (gpuData.lda_locs[i] * gpuData.lda_locs[i] + 
                     gpuData.lda_locs_neighbors[i] * gpuData.lda_locs_neighbors[i] + 
                     gpuData.lda_locs[i] * gpuData.lda_locs_neighbors[i]) / 1e9;
         

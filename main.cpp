@@ -232,6 +232,7 @@ int main(int argc, char **argv)
     auto start_send_centers_of_gravity = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<double>> allCenters;
     sendCentersOfGravityToRoot(centers, allCenters, opts);
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end_send_centers_of_gravity = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_send_centers_of_gravity = end_send_centers_of_gravity - start_send_centers_of_gravity;
     double max_duration_send_centers_of_gravity;
@@ -242,6 +243,7 @@ int main(int argc, char **argv)
     // 3. Reorder centers at processor 0
     auto start_reorder_centers = std::chrono::high_resolution_clock::now();
     reorderCenters(allCenters, opts);
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end_reorder_centers = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_reorder_centers = end_reorder_centers - start_reorder_centers;
     double max_duration_reorder_centers;
@@ -254,6 +256,7 @@ int main(int argc, char **argv)
     int numCenters = allCenters.size();
     MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
     broadcastCenters(allCenters, numCenters, opts);
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end_broadcast_centers = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_broadcast_centers = end_broadcast_centers - start_broadcast_centers;
     double max_duration_broadcast_centers;
@@ -269,6 +272,7 @@ int main(int argc, char **argv)
     if (opts.mode == "prediction"){
         localBlocks_test = createBlockInfo_test(finerPartitions_test, centers_test, opts);
     }
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end_create_block_info = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_create_block_info = end_create_block_info - start_create_block_info;
     double max_duration_create_block_info;
@@ -314,6 +318,7 @@ int main(int argc, char **argv)
     auto start_gpu_copy = std::chrono::high_resolution_clock::now();
     // Step 1: Copy data to GPU
     GpuData gpuData = copyDataToGPU(opts, localBlocks);
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end_gpu_copy = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_gpu_copy = end_gpu_copy - start_gpu_copy;
     double max_duration_gpu_copy;
@@ -437,13 +442,14 @@ int main(int argc, char **argv)
     // Step 3: Cleanup GPU memory
     auto start_cleanup_gpu = std::chrono::high_resolution_clock::now();
     cleanupGpuMemory(gpuData);
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end_cleanup_gpu = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_cleanup_gpu = end_cleanup_gpu - start_cleanup_gpu;
     double max_duration_cleanup_gpu;
     double duration_cleanup_gpu_seconds = duration_cleanup_gpu.count();
     MPI_Allreduce(&duration_cleanup_gpu_seconds, &max_duration_cleanup_gpu, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
-
+    
     auto end_total = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_total = end_total - start_total;
     double duration_total_seconds = duration_total.count();
