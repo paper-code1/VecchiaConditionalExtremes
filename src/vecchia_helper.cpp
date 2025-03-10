@@ -4,7 +4,7 @@
 #include "input_parser.h"
 
 void saveTimeAndGflops(
-    double duration_outer_partitioning, double duration_finer_partitioning, 
+    double duration_RAC_partitioning, 
     double duration_centers_of_gravity, double duration_send_centers_of_gravity, 
     double duration_reorder_centers, double duration_broadcast_centers, 
     double duration_create_block_info, double duration_block_sending, 
@@ -28,9 +28,9 @@ void saveTimeAndGflops(
     std::ofstream file(logFileName, std::ios::app);
     // save the mspe in 16 digits after the decimal point
     if (file.tellp() == 0) {
-        file << "outer_partitioning,finer_partitioning,centers_of_gravity_calculation,send_centers_of_gravity,reorder_centers,broadcast_centers,create_block_info,block_sending,nn_searching,gpu_copy,computation,cleanup_gpu,total,total_gflops,numPointsPerProcess,numPointsTotal,numBlocksPerProcess,numBlocksTotal,m,seed,mspe,rmspe,ci_coverage,optimized_log_likelihood" << std::endl;
+        file << "RAC_partitioning,centers_of_gravity_calculation,send_centers_of_gravity,reorder_centers,broadcast_centers,create_block_info,block_sending,nn_searching,gpu_copy,computation,cleanup_gpu,total,total_gflops,numPointsPerProcess,numPointsTotal,numBlocksPerProcess,numBlocksTotal,m,seed,mspe,rmspe,ci_coverage,optimized_log_likelihood" << std::endl;
     }
-    file << std::setprecision(15) << duration_outer_partitioning << "," << duration_finer_partitioning << "," << duration_centers_of_gravity << "," << duration_send_centers_of_gravity << "," << duration_reorder_centers << "," << duration_broadcast_centers << "," << duration_create_block_info << "," << duration_block_sending << "," << duration_nn_searching << "," << duration_gpu_copy << "," << duration_computation << "," << duration_cleanup_gpu << "," << duration_total << "," << total_gflops << "," << numPointsPerProcess << "," << numPointsTotal << "," << numBlocksPerProcess << "," << numBlocksTotal << "," << m << "," << seed << "," << mspe << "," << rmspe << "," << ci_coverage << "," << optimized_log_likelihood << std::endl;
+    file << std::setprecision(15) << duration_RAC_partitioning << "," << duration_centers_of_gravity << "," << duration_send_centers_of_gravity << "," << duration_reorder_centers << "," << duration_broadcast_centers << "," << duration_create_block_info << "," << duration_block_sending << "," << duration_nn_searching << "," << duration_gpu_copy << "," << duration_computation << "," << duration_cleanup_gpu << "," << duration_total << "," << total_gflops << "," << numPointsPerProcess << "," << numPointsTotal << "," << numBlocksPerProcess << "," << numBlocksTotal << "," << m << "," << seed << "," << mspe << "," << rmspe << "," << ci_coverage << "," << optimized_log_likelihood << std::endl;
 
     // save the theta to a file
     std::string thetaFileName = logDir + "/theta_numPointsTotal" + std::to_string(opts.numPointsTotal) + "_numBlocksTotal" + std::to_string(opts.numBlocksTotal) + "_m" + std::to_string(opts.m) + "_seed" + std::to_string(opts.seed) + "_isScaled" + std::to_string(is_scaled) + "_" + opts.log_append + ".csv";

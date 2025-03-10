@@ -174,42 +174,23 @@ int main(int argc, char **argv)
 
     // 2.1 Partition points and communicate them
     if (rank == 0){
-        std::cout << "Performing partitioning" << std::endl;
+        std::cout << "Performing RAC partitioning" << std::endl;
     }
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
-    std::vector<PointMetadata> localPoints_out_partitioned;
-    std::vector<PointMetadata> localPoints_out_partitioned_test;
-    partitionPoints(localPoints, localPoints_out_partitioned, opts);
+    std::vector<std::vector<PointMetadata>> finerPartitions;
+    std::vector<std::vector<PointMetadata>> finerPartitions_test;
+    partitionPointsDirectly(localPoints, finerPartitions, opts);
     if (opts.mode == "prediction"){
-        partitionPoints(localPoints_test, localPoints_out_partitioned_test, opts);
+        partitionPointsDirectly(localPoints_test, finerPartitions_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
     
     // Find the maximum preprocessing duration across all processes
-    double max_outer_partitioning;
+    double max_RAC_partitioning;
     double duration_preprocessing_seconds = duration_preprocessing.count();
-    MPI_Allreduce(&duration_preprocessing_seconds, &max_outer_partitioning, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-    // 2.2 Perform finer partitioning within each processor
-    if (rank == 0){
-        std::cout << "Performing finer partitioning" << std::endl;
-    }
-    auto start_finer_partitioning = std::chrono::high_resolution_clock::now();
-    std::vector<std::vector<PointMetadata>> finerPartitions;
-    std::vector<std::vector<PointMetadata>> finerPartitions_test;
-    finerPartition(localPoints_out_partitioned, opts.numBlocksPerProcess, finerPartitions, opts);
-    if (opts.mode == "prediction"){
-        finerPartition(localPoints_out_partitioned_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts);
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
-    auto end_finer_partitioning = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_finer_partitioning = end_finer_partitioning - start_finer_partitioning;
-    double max_duration_finer_partitioning;
-    double duration_finer_partitioning_seconds = duration_finer_partitioning.count();
-    MPI_Allreduce(&duration_finer_partitioning_seconds, &max_duration_finer_partitioning, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
+    MPI_Allreduce(&duration_preprocessing_seconds, &max_RAC_partitioning, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // 2.3 Calculate centers of gravity for each block
     if (rank == 0){
@@ -481,8 +462,8 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
         saveTimeAndGflops(
-            max_outer_partitioning, max_duration_finer_partitioning, 
-            max_duration_centers_of_gravity, max_duration_send_centers_of_gravity, 
+            max_RAC_partitioning, max_duration_centers_of_gravity, 
+            max_duration_send_centers_of_gravity, 
             max_duration_reorder_centers, max_duration_broadcast_centers, 
             max_duration_create_block_info, max_duration_block_sending, 
             max_duration_nn_searching, 

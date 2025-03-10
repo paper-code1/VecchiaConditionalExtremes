@@ -36,4 +36,10 @@ std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, c
 // Function to perform random clustering
 std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, int k, int dim, int seed);
 
+// Function to partition points directly
+void partitionPointsDirectly(
+    const std::vector<PointMetadata>& localPoints, 
+    std::vector<std::vector<PointMetadata>>& finerPartitions, 
+    const Opts& opts);
+
 #endif // RANDOM_POINTS_H
