@@ -69,48 +69,53 @@ std::vector<BlockInfo> unpackBlockInfo(const std::vector<double> &buffer, const 
     return blocks;
 }
 
-std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::vector<double>> &allCenters, int m, double distance_threshold, const Opts& opts)
+std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks_test, double distance_threshold, const Opts& opts)
 {
+    // returned: receivedBlocks, which is within the MC-NN based range
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    int numBlocks = allCenters.size();
 
     // Prepare buffers to send blocks to other processors
     std::vector<std::set<int>> blockIndexSets(size);
     std::vector<std::vector<BlockInfo>> sendBuffers(size);
 
+    // 42 is a magic number, I like it
     int m_const = (opts.numBlocksTotal == opts.numPointsTotal) ? 300 : 42;
 
-    for (const auto &blockInfo : blockInfos)
-    {
-        int globalOrder = blockInfo.globalOrder;
+    // Combine CenterRanks and CenterRanks_test
+    std::vector<std::pair<std::vector<double>, int>> allCenterRanks;
+    allCenterRanks.insert(allCenterRanks.end(), CenterRanks.begin(), CenterRanks.end());
+    allCenterRanks.insert(allCenterRanks.end(), CenterRanks_test.begin(), CenterRanks_test.end());
 
-        // Send first 10 blocks to all processors
-        if (globalOrder < m_const)
-        {
-            for (int dest = 0; dest < size; ++dest)
-            {
-                if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end())
-                {
-                    sendBuffers[dest].push_back(blockInfo);
-                    blockIndexSets[dest].insert(globalOrder);
+    // For each center in combined CenterRanks
+    for (const auto &centerRank : allCenterRanks) {
+        const auto &center = centerRank.first;
+        int destRank = centerRank.second;
+        
+        // For each block, check if it's within distance threshold of this center
+        for (const auto &blockInfo : blockInfos) {
+            int globalOrder = blockInfo.globalOrder;
+            
+            // Send first m_const blocks to all processors to ensure enough blocks
+            if (globalOrder < m_const) {
+                for (int dest = 0; dest < size; ++dest) {
+                    if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end()) {
+                        sendBuffers[dest].push_back(blockInfo);
+                        blockIndexSets[dest].insert(globalOrder);
+                    }
                 }
+                continue;
             }
-        }
-
-        // Calculate distance to future global centers and check against threshold
-        for (int j = globalOrder + 1; j < numBlocks; ++j)
-        {
-            double distance = calculateDistance(blockInfo.center, allCenters[j]);
-            if (distance < distance_threshold)
-            {
-                int dest = std::min(static_cast<int>(allCenters[j][0] * size), size - 1);
-                if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end())
-                {
-                    sendBuffers[dest].push_back(blockInfo);
-                    blockIndexSets[dest].insert(globalOrder);
+            
+            // Calculate distance between block center and the current center
+            double distance = calculateDistance(blockInfo.center, center);
+            
+            // If within threshold, send to the corresponding rank
+            if (distance < distance_threshold) {
+                if (blockIndexSets[destRank].find(globalOrder) == blockIndexSets[destRank].end()) {
+                    sendBuffers[destRank].push_back(blockInfo);
+                    blockIndexSets[destRank].insert(globalOrder);
                 }
             }
         }
@@ -118,8 +123,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
 
     // Pack data into buffers
     std::vector<std::vector<double>> packedSendBuffers(size);
-    for (int dest = 0; dest < size; ++dest)
-    {
+    for (int dest = 0; dest < size; ++dest) {
         packBlockInfo(sendBuffers[dest], packedSendBuffers[dest]);
     }
 
@@ -127,16 +131,14 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     std::vector<int> sendCounts(size), sendDispls(size);
     std::vector<int> recvCounts(size), recvDispls(size);
 
-    for (int dest = 0; dest < size; ++dest)
-    {
+    for (int dest = 0; dest < size; ++dest) {
         sendCounts[dest] = packedSendBuffers[dest].size();
     }
 
     MPI_Alltoall(sendCounts.data(), 1, MPI_INT, recvCounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     int totalSendCount = 0, totalRecvCount = 0;
-    for (int i = 0; i < size; ++i)
-    {
+    for (int i = 0; i < size; ++i) {
         sendDispls[i] = totalSendCount;
         totalSendCount += sendCounts[i];
         recvDispls[i] = totalRecvCount;
@@ -144,8 +146,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     }
 
     std::vector<double> sendBuffer(totalSendCount), recvBuffer(totalRecvCount);
-    for (int dest = 0; dest < size; ++dest)
-    {
+    for (int dest = 0; dest < size; ++dest) {
         std::copy(packedSendBuffers[dest].begin(), packedSendBuffers[dest].end(), sendBuffer.begin() + sendDispls[dest]);
     }
 
@@ -165,8 +166,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
         return a.globalOrder < b.globalOrder;
     });
     int m_nn = (pred_tag) ? opts.m_test : opts.m;
-    // double distance_threshold = (pred_tag) ? opts.distance_threshold * 10 : opts.distance_threshold;
-    double distance_threshold = opts.distance_threshold;
+    double distance_threshold = opts.distance_threshold_finer;
     
     // Perform nearest neighbor search
     #pragma omp parallel for
@@ -182,7 +182,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
             for (size_t j = 0; j < prevBlock.blocks.size(); ++j) {
                 double distance = calculateDistance(block.center, prevBlock.blocks[j]);
                 // Add all points if the block order is small
-                if (distance < distance_threshold || block.globalOrder <= 700){
+                if (distance < distance_threshold || block.globalOrder <= 200){
                     distancesMeta.emplace_back(distance, prevBlock.blocks[j], prevBlock.observations_blocks[j]);
                 }
             }

@@ -99,14 +99,16 @@ int main(int argc, char **argv)
                 exit(-1);
                 break;
         }
-        opts.distance_threshold = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier);
+        opts.distance_threshold_coarse = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier);
+        opts.distance_threshold_finer = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier/10);
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;
         std::cout << "Number of total blocks_test: " << opts.numBlocksTotal_test << std::endl;
         std::cout << "The number of nearest neighbors: " << opts.m << std::endl;
         std::cout << "The number of nearest neighbors_test: " << opts.m_test << std::endl;
-        std::cout << "The distance threshold: " << opts.distance_threshold << std::endl;
+        std::cout << "The distance threshold_coarse: " << opts.distance_threshold_coarse << std::endl;
+        std::cout << "The distance threshold_finer: " << opts.distance_threshold_finer << std::endl;
         std::cout << "Dimension: " << opts.dim << std::endl;
         std::cout << "Range offset: " << opts.range_offset << std::endl;
         std::cout << "Distance scale: ";
@@ -211,8 +213,14 @@ int main(int argc, char **argv)
 
     // 2.4 Send centers of gravity to processor 0
     auto start_send_centers_of_gravity = std::chrono::high_resolution_clock::now();
-    std::vector<std::vector<double>> allCenters;
+    // first is the centers, second is the rank of the processor
+    std::vector<std::pair<std::vector<double>, int>> allCenters;
+    std::vector<std::pair<std::vector<double>, int>> allCenters_test;
+    // send the centers to the root processor and add the rank (label)
     sendCentersOfGravityToRoot(centers, allCenters, opts);
+    if (opts.mode == "prediction"){
+        sendCentersOfGravityToRoot(centers_test, allCenters_test, opts);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_send_centers_of_gravity = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_send_centers_of_gravity = end_send_centers_of_gravity - start_send_centers_of_gravity;
@@ -222,27 +230,24 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     
     // 3. Reorder centers at processor 0
+    std::cout << "Reordering centers" << std::endl;
     auto start_reorder_centers = std::chrono::high_resolution_clock::now();
     reorderCenters(allCenters, opts);
+    // Broadcast reordered centers to all processors
+    int numCenters = allCenters.size();
+    int numCenters_test = allCenters_test.size();
+    MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    broadcastCenters(allCenters, numCenters, opts);
+    if (opts.mode == "prediction"){
+        MPI_Bcast(&numCenters_test, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        broadcastCenters(allCenters_test, numCenters_test, opts);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_reorder_centers = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_reorder_centers = end_reorder_centers - start_reorder_centers;
     double max_duration_reorder_centers;
     double duration_reorder_centers_seconds = duration_reorder_centers.count();
     MPI_Allreduce(&duration_reorder_centers_seconds, &max_duration_reorder_centers, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
-    
-    // 3.1 Broadcast reordered centers to all processors
-    auto start_broadcast_centers = std::chrono::high_resolution_clock::now();
-    int numCenters = allCenters.size();
-    MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    broadcastCenters(allCenters, numCenters, opts);
-    MPI_Barrier(MPI_COMM_WORLD);
-    auto end_broadcast_centers = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_broadcast_centers = end_broadcast_centers - start_broadcast_centers;
-    double max_duration_broadcast_centers;
-    double duration_broadcast_centers_seconds = duration_broadcast_centers.count();
-    MPI_Allreduce(&duration_broadcast_centers_seconds, &max_duration_broadcast_centers, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
 
     // 4. NN searching
@@ -251,6 +256,7 @@ int main(int argc, char **argv)
     std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, opts);
     std::vector<BlockInfo> localBlocks_test;
     if (opts.mode == "prediction"){
+        // testset does not need to consider order of blocks
         localBlocks_test = createBlockInfo_test(finerPartitions_test, centers_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -264,7 +270,7 @@ int main(int argc, char **argv)
     // 4.2 Block candidate preparation
     // Here, you could set the first 100 need to obtain all previous blocks and set threshold
     auto start_block_sending = std::chrono::high_resolution_clock::now();
-    std::vector<BlockInfo> receivedBlocks = processAndSendBlocks(localBlocks, allCenters, opts.m, opts.distance_threshold, opts);
+    std::vector<BlockInfo> receivedBlocks = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, opts);
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_block_sending = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_block_sending = end_block_sending - start_block_sending;
@@ -464,7 +470,7 @@ int main(int argc, char **argv)
         saveTimeAndGflops(
             max_RAC_partitioning, max_duration_centers_of_gravity, 
             max_duration_send_centers_of_gravity, 
-            max_duration_reorder_centers, max_duration_broadcast_centers, 
+            max_duration_reorder_centers, 
             max_duration_create_block_info, max_duration_block_sending, 
             max_duration_nn_searching, 
             max_duration_gpu_copy, max_duration_computation,

@@ -6,7 +6,6 @@ m_bv=(5 10 20 30 60 90 120 150 180 210 240 270)
 DATA_DIR="./maternSimuData"
 train_metadata_path="$DATA_DIR/training_data_kl.csv"
 params_path="$DATA_DIR/hyperparameters.csv"
-THRESHOLD=999
 DIM=8
 
 # read params from params_path
@@ -31,13 +30,12 @@ for b in ${bc[@]}; do
         --distance_scale_init $distance_scale \
         --train_metadata_path $train_metadata_path \
         --kernel_type Matern72 \
-        --nn_multiplier 9999 \
+        --nn_multiplier 99999 \
         --log_append kl-matern72-simu
         # no scaled distance
         ./bin/dbv --num_total_points $N \
         --num_total_blocks $b \
         -m $m \
-        --distance_threshold $THRESHOLD \
         --dim $DIM \
         --mode estimation \
         --maxeval 1 \
@@ -46,7 +44,7 @@ for b in ${bc[@]}; do
         --distance_scale_init $nodistance_scale_init \
         --train_metadata_path $train_metadata_path \
         --kernel_type Matern72 \
-        --nn_multiplier 9999 \
+        --nn_multiplier 99999 \
         --log_append kl-matern72-simu
     done
 done

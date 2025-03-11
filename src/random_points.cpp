@@ -228,12 +228,13 @@ void finerPartition(const std::vector<PointMetadata> &metadata, int numBlocksPer
     }
 }
 
-// Function to calculate centers of gravity for each block (specific for 2D)
+// Function to calculate centers of gravity for each block with OpenMP parallelization
 std::vector<std::vector<double>> calculateCentersOfGravity(const std::vector<std::vector<PointMetadata>> &finerPartitions, const Opts &opts)
 {
     int numBlocks = finerPartitions.size();
     std::vector<std::vector<double>> centers(numBlocks, std::vector<double>(opts.dim));
 
+    #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < numBlocks; ++i)
     {
         auto &blockmetadata = finerPartitions[i];
@@ -259,7 +260,7 @@ std::vector<std::vector<double>> calculateCentersOfGravity(const std::vector<std
 }
 
 // Function to send centers of gravity to processor 0
-void sendCentersOfGravityToRoot(const std::vector<std::vector<double>> &centers, std::vector<std::vector<double>> &allCenters, const Opts &opts)
+void sendCentersOfGravityToRoot(const std::vector<std::vector<double>> &centers, std::vector<std::pair<std::vector<double>, int>> &allCenters, const Opts &opts)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -275,87 +276,102 @@ void sendCentersOfGravityToRoot(const std::vector<std::vector<double>> &centers,
     {
         for (int i = 0; i < size; ++i)
         {
-            displacements[i] = totalCenters * opts.dim;
+            displacements[i] = totalCenters * (opts.dim + 1); // +1 for rank
             totalCenters += recvCounts[i];
-            recvCounts[i] *= opts.dim; // Each center has DIMENSION doubles
+            recvCounts[i] *= (opts.dim + 1); // Each center has DIMENSION doubles + rank
         }
     }
 
-    std::vector<double> sendBuffer(numCenters * opts.dim);
+    // Create send buffer with center coordinates and rank
+    std::vector<double> sendBuffer(numCenters * (opts.dim + 1));
     for (int i = 0; i < numCenters; ++i)
     {
         for (int j = 0; j < opts.dim; ++j)
         {
-            sendBuffer[i * opts.dim + j] = centers[i][j];
+            sendBuffer[i * (opts.dim + 1) + j] = centers[i][j];
         }
+        // Add rank information
+        sendBuffer[i * (opts.dim + 1) + opts.dim] = static_cast<double>(rank);
     }
 
     std::vector<double> recvBuffer;
     if (rank == 0)
     {
-        recvBuffer.resize(totalCenters * opts.dim);
+        recvBuffer.resize(totalCenters * (opts.dim + 1));
     }
-    MPI_Gatherv(sendBuffer.data(), numCenters * opts.dim, MPI_DOUBLE, recvBuffer.data(), recvCounts.data(), displacements.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(sendBuffer.data(), numCenters * (opts.dim + 1), MPI_DOUBLE, 
+                recvBuffer.data(), recvCounts.data(), displacements.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank == 0)
     {
         allCenters.clear();
-        allCenters.resize(totalCenters, std::vector<double>(opts.dim));
+        allCenters.resize(totalCenters);
+        
         for (int i = 0; i < totalCenters; ++i)
         {
+            std::vector<double> centerCoords(opts.dim);
             for (int j = 0; j < opts.dim; ++j)
             {
-                allCenters[i][j] = recvBuffer[i * opts.dim + j];
+                centerCoords[j] = recvBuffer[i * (opts.dim + 1) + j];
             }
+            int centerRank = static_cast<int>(recvBuffer[i * (opts.dim + 1) + opts.dim]);
+            allCenters[i] = std::make_pair(centerCoords, centerRank);
         }
     }
 }
 
 // Function to randomly reorder centers at processor 0
-void reorderCenters(std::vector<std::vector<double>> &centers, const Opts &opts)
+void reorderCenters(std::vector<std::pair<std::vector<double>, int>> &centers, const Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (rank == 0)
     {
-        // Shuffle non-empty centers
-        std::random_shuffle(centers.begin(), centers.end());
+        // Use a seeded random number generator for reproducibility
+        std::mt19937 gen(opts.seed);
+        // Shuffle non-empty centers using std::shuffle instead of deprecated std::random_shuffle
+        std::shuffle(centers.begin(), centers.end(), gen);
     }
 }
 
 // Function to broadcast reordered centers to all processors
-void broadcastCenters(std::vector<std::vector<double>> &allCenters, int numCenters, const Opts &opts)
+void broadcastCenters(std::vector<std::pair<std::vector<double>, int>> &allCenters, int numCenters, const Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     // Prepare data for broadcast
-    std::vector<double> centersData(numCenters * opts.dim);
+    std::vector<double> centersData(numCenters * (opts.dim + 1)); // +1 for rank information
     if (rank == 0)
     {
         for (int i = 0; i < numCenters; ++i)
         {
             for (int j = 0; j < opts.dim; ++j)
             {
-                centersData[i * opts.dim + j] = allCenters[i][j];
+                centersData[i * (opts.dim + 1) + j] = allCenters[i].first[j];
             }
+            // Add rank information
+            centersData[i * (opts.dim + 1) + opts.dim] = static_cast<double>(allCenters[i].second);
         }
     }
 
     // Broadcast the reordered centers to all processes
-    MPI_Bcast(centersData.data(), numCenters * opts.dim, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(centersData.data(), numCenters * (opts.dim + 1), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     // Resize the allCenters vector on all processes
-    allCenters.resize(numCenters, std::vector<double>(opts.dim));
+    allCenters.resize(numCenters);
 
-    // Convert data back to vector of vectors
+    // Convert data back to vector of pairs (coordinates, rank)
     for (int i = 0; i < numCenters; ++i)
     {
+        std::vector<double> centerCoords(opts.dim);
         for (int j = 0; j < opts.dim; ++j)
         {
-            allCenters[i][j] = centersData[i * opts.dim + j];
+            centerCoords[j] = centersData[i * (opts.dim + 1) + j];
         }
+        int centerRank = static_cast<int>(centersData[i * (opts.dim + 1) + opts.dim]);
+        allCenters[i] = std::make_pair(centerCoords, centerRank);
     }
 }
 
@@ -755,7 +771,7 @@ void partitionPointsDirectly(
 
     // 5. Process received points and add them to their respective clusters
     int pointsPerRecord = opts.dim + 2; // Size of each point record in the buffer
-    int expectedPoints = totalRecvSize / pointsPerRecord;
+    // int expectedPoints = totalRecvSize / pointsPerRecord;
 
     // Process points with bounds checking
     for (int i = 0; i < totalRecvSize; i += pointsPerRecord)

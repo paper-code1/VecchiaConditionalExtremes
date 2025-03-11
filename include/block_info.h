@@ -38,7 +38,7 @@ double calculateDistance(const std::vector<double>& point1, const std::vector<do
 std::vector<BlockInfo> createBlockInfo(
     const std::vector<std::vector<PointMetadata>> &finerPartitions,
     const std::vector<std::vector<double>> &localCenters,
-    const std::vector<std::vector<double>> &allCenters,
+    const std::vector<std::pair<std::vector<double>, int>> &allCenters,
     const Opts& opts);
 
 // Function to create block information for each processor

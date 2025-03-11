@@ -27,7 +27,8 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("num_total_points_test", "Total number of points for testing", cxxopts::value<int>()->default_value("2000"))
     ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<int>()->default_value("100"))
     ("m_test", "Special rule for the first 100 blocks for testing", cxxopts::value<int>()->default_value("120"))
-    ("distance_threshold", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
+    ("distance_threshold_coarse", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
+    ("distance_threshold_finer", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.05"))
     ("distance_scale", "Distance scale for blocks, used for scaling distance", cxxopts::value<std::vector<double>>())
     ("distance_scale_init", "Initial distance scale for blocks, used for optimization", cxxopts::value<std::vector<double>>())
     ("kernel_type", "Kernel type", cxxopts::value<std::string>()->default_value("Matern72"))
@@ -80,7 +81,8 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.print = result["print"].as<bool>();
     opts.m = result["m"].as<int>();
     opts.m_test = result["m_test"].as<int>();
-    opts.distance_threshold = result["distance_threshold"].as<double>();
+    opts.distance_threshold_coarse = result["distance_threshold_coarse"].as<double>();
+    opts.distance_threshold_finer = result["distance_threshold_finer"].as<double>();
     opts.log_append = result["log_append"].as<std::string>();
     opts.nn_multiplier = result["nn_multiplier"].as<int>();
     // Get local rank within the node using MPI

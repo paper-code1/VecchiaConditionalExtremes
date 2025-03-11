@@ -42,7 +42,8 @@ struct Opts
     int gpu_id;
     int seed;
     int dim;
-    double distance_threshold;
+    double distance_threshold_coarse;
+    double distance_threshold_finer;
     // kmeans and optimization
     int kmeans_max_iter;
     std::string clustering;

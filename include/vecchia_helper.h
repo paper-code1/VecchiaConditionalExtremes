@@ -5,7 +5,7 @@
 void saveTimeAndGflops(
     double duration_RAC_partitioning, 
     double duration_centers_of_gravity, double duration_send_centers_of_gravity, 
-    double duration_reorder_centers, double duration_broadcast_centers, 
+    double duration_reorder_centers, 
     double duration_create_block_info, double duration_block_sending, 
     double duration_nn_searching, double duration_gpu_copy, 
     double duration_computation, double duration_cleanup_gpu,

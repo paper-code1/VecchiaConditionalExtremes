@@ -19,13 +19,13 @@ void finerPartition(const std::vector<PointMetadata>& points, int numBlocksPerPr
 std::vector<std::vector<double>> calculateCentersOfGravity(const std::vector<std::vector<PointMetadata>> &finerPartitions, const Opts& opts);
 
 // Function to send centers of gravity to processor 0
-void sendCentersOfGravityToRoot(const std::vector<std::vector<double>>& centers, std::vector<std::vector<double>>& allCenters, const Opts& opts);
+void sendCentersOfGravityToRoot(const std::vector<std::vector<double>>& centers, std::vector<std::pair<std::vector<double>, int>>& allCenters, const Opts& opts);
 
 // Function to randomly reorder centers at processor 0
-void reorderCenters(std::vector<std::vector<double>>& centers, const Opts& opts);
+void reorderCenters(std::vector<std::pair<std::vector<double>, int>>& allCenters, const Opts& opts);
 
 // Function to broadcast reordered centers to all processors
-void broadcastCenters(std::vector<std::vector<double>>& allCenters, int numCenters, const Opts& opts);
+void broadcastCenters(std::vector<std::pair<std::vector<double>, int>>& allCenters, int numCenters, const Opts& opts);
 
 // Function to perform k-means++ clustering with iterations and parallelization
 std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int k, int dim, int maxIterations, int rank, int seed);
