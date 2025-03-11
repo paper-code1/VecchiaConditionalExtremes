@@ -22,7 +22,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     options.add_options()
     ("num_total_points", "Total number of points", cxxopts::value<int>()->default_value("20000"))
     ("num_total_blocks", "Total number of blocks", cxxopts::value<int>()->default_value("1000"))
-    ("print", "Print additional information", cxxopts::value<bool>()->default_value("false"))
+    ("print", "Print additional information", cxxopts::value<bool>()->default_value("true")->implicit_value("true"))
     ("m", "Special rule for the first 100 blocks", cxxopts::value<int>()->default_value("200"))
     ("num_total_points_test", "Total number of points for testing", cxxopts::value<int>()->default_value("2000"))
     ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<int>()->default_value("100"))
@@ -44,7 +44,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("maxeval", "Maximum number of function evaluations", cxxopts::value<int>()->default_value("5000"))
     ("xtol_rel", "Relative tolerance for optimization", cxxopts::value<double>()->default_value("1e-5"))
     ("ftol_rel", "Relative tolerance of function for optimization", cxxopts::value<double>()->default_value("1e-5"))
-    ("mode", "Mode type (estimation or prediction or performance)", cxxopts::value<std::string>()->default_value("estimation"))
+    ("mode", "Mode type (estimation or prediction)", cxxopts::value<std::string>()->default_value("estimation"))
     ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("1000"))
     ("omp_num_threads", "Number of threads for OpenMP", cxxopts::value<int>()->default_value("20"))
     ("log_append", "Append to the log file", cxxopts::value<std::string>()->default_value(""))
@@ -177,10 +177,10 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.current_iter = result["current_iter"].as<int>();
     opts.clustering = result["clustering"].as<std::string>();
     opts.mode = result["mode"].as<std::string>();
-    if (opts.mode == "performance"){
-        opts.print = true;
-        opts.maxeval = 1;
-    }
+    // if (opts.mode == "performance"){
+    //     opts.print = true;
+    //     opts.maxeval = 1;
+    // }
     opts.num_simulations = result["num_simulations"].as<int>();
     return true;
 }

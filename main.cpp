@@ -39,7 +39,7 @@ double objective_function(const std::vector<double> &x, std::vector<double> &gra
     double result = -performComputationOnGPU(*gpuData, x, *opts);
     
     // Print optimization info
-    if (opt_data->rank == 0 && opts->mode != "performance") {
+    if (opt_data->rank == 0 && opts->print) {
         std::cout << "Optimization step: " << opts->current_iter++ << ", ";
         std::cout << "f(theta): " << std::fixed << std::setprecision(6) << -result << ", ";
         std::cout << "Theta: ";
@@ -139,9 +139,9 @@ int main(int argc, char **argv)
     std::vector<PointMetadata> localPoints;
     std::vector<PointMetadata> localPoints_test;
     if (opts.train_metadata_path != ""){
-        localPoints = readPointsConcurrently(opts.train_metadata_path, opts);
+        localPoints = readPointsConcurrently(opts.train_metadata_path, opts.numBlocksPerProcess, opts);
         if (opts.mode == "prediction"){
-            localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts);
+            localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts.numBlocksPerProcess_test, opts);
         }
     }
     else{
@@ -179,9 +179,9 @@ int main(int argc, char **argv)
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<PointMetadata>> finerPartitions;
     std::vector<std::vector<PointMetadata>> finerPartitions_test;
-    partitionPointsDirectly(localPoints, finerPartitions, opts);
+    partitionPointsDirectly(localPoints, finerPartitions, opts.numBlocksPerProcess, opts);
     if (opts.mode == "prediction"){
-        partitionPointsDirectly(localPoints_test, finerPartitions_test, opts);
+        partitionPointsDirectly(localPoints_test, finerPartitions_test, opts.numBlocksPerProcess_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
@@ -368,7 +368,7 @@ int main(int argc, char **argv)
     optimizer.set_min_objective(objective_function, &opt_data);
 
     // print the config of optimizer
-    if (rank == 0 && opts.mode != "performance"){
+    if (rank == 0 && opts.print){
         std::cout << "Optimizer dimension: " << optimizer.get_dimension() << std::endl;
         std::cout << "Optimizer lower bounds: ";
         for (auto bound : opts.lower_bounds) {
@@ -391,7 +391,7 @@ int main(int argc, char **argv)
     
     try {
         nlopt::result result = optimizer.optimize(optimized_theta, optimized_log_likelihood);
-        if (rank == 0 && opts.mode != "performance") {
+        if (rank == 0 && opts.print) {
             std::cout << "Optimization result tag: " << result << std::endl;
             std::cout << "Optimized log-likelihood: " << -optimized_log_likelihood << std::endl;
             std::cout << "Optimized theta values: ";
@@ -401,7 +401,7 @@ int main(int argc, char **argv)
             std::cout << std::endl;
         }
     } catch (std::exception &e) {
-        if (rank == 0 && opts.mode != "performance") { 
+        if (rank == 0 && opts.print) { 
             std::cerr << "Optimization failed: " << e.what() << std::endl;
         }
     }
@@ -417,7 +417,7 @@ int main(int argc, char **argv)
     MPI_Allreduce(&duration_computation_seconds, &max_duration_computation, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (rank == 0 && opts.mode != "performance"){
+    if (rank == 0 && opts.print){
         std::cout << "-------------------Estimation Done-----------------" << std::endl;
     }
     // Step 3: Cleanup GPU memory

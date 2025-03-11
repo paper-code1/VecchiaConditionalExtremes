@@ -1,33 +1,29 @@
 #!/bin/bash
-#SBATCH -N 1
+#SBATCH -N 2
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
 #SBATCH --partition=batch
 #SBATCH -J benchmark_data_vbatched
 #SBATCH -o benchmark_data_vbatched.%J.out
 #SBATCH -e benchmark_data_vbatched.%J.err
-#SBATCH --time=24:00:00
+#SBATCH --time=00:10:00
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mem=200G # try larger memory
-
-# # Set OpenMP environment variables
-# export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
-# export OMP_PROC_BIND=true
-# export OMP_PLACES=cores
 
 make clean && make -j
 
 N=1800000
 N_TEST=200000
-BlockCount=(20000)
+BlockCount=(20000) # 20000
 BlockCount_TEST=(40000)
-NN_est=(100 200 200) # 300 400
-NN_pred=(400)
+NN_est=(100 200 400)
+NN_pred=(400 600)
 DIM=8
 kernel_type=Matern72
-maxeval=(1000 2000 100) # 3000 4000
+maxeval=(500 1000 1000)
 
-DATA_DIR="./log"
+export OMP_DISPLAY_AFFINITY=TRUE
+
 SPECIES=("O2" "N2" "H" "N" "O" "He") # 
 
 for species in ${SPECIES[@]}
@@ -61,7 +57,7 @@ do
                         # Skip first iteration, run others
                         if [ $index -ne -1 ]; then
                             # Update maxeval parameter to use current_maxeval
-                            ./bin/dbv --num_total_points "$N" \
+                            srun --cpus-per-task=40 ./bin/dbv --num_total_points "$N" \
                             --num_total_points_test "$N_TEST" \
                             --num_total_blocks "$bc_est" \
                             --num_total_blocks_test "$bc_pred" \
@@ -71,18 +67,21 @@ do
                             --theta_init "$theta_init" \
                             --distance_scale "$distance_scale" \
                             --distance_scale_init "$distance_scale_init" \
+                            --xtol_rel 1e-3 \
+                            --ftol_rel 1e-5 \
                             --dim "$DIM" \
                             --mode prediction \
                             --maxeval "$current_maxeval" \
                             --train_metadata_path "$train_metadata_path" \
                             --test_metadata_path "$test_metadata_path" \
                             --kernel_type "$kernel_type"\
-                            --seed "$fold"
+                            --seed "$fold"\
+                            --nn_multiplier 200
                         fi
                         current_maxeval=1
                     done
                 done    
-    params_path="$DATA_DIR/theta_numPointsTotal1800000_numBlocksTotal${bc_est}_m${nn_est}_seed${fold}_isScaled1_.csv"
+    params_path="./log/theta_numPointsTotal1800000_numBlocksTotal${bc_est}_m${nn_est}_seed${fold}_isScaled1_.csv"
 
                 # Read the first line of the CSV file
                 line=$(head -n 1 $params_path)
@@ -103,6 +102,6 @@ do
             done
         done
     done
-    mkdir -p $DATA_DIR/$species
-    mv $DATA_DIR/*.csv $DATA_DIR/$species
+    mkdir -p ./log/benchmark/$species
+    mv ./log/*.csv ./log/benchmark/$species
 done

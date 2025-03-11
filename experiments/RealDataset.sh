@@ -1,26 +1,26 @@
 #!/bin/bash
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=5
+#SBATCH --cpus-per-task=40
 #SBATCH --partition=batch
-#SBATCH -J benchmark_data_vbatched
-#SBATCH -o benchmark_data_vbatched.%J.out
-#SBATCH -e benchmark_data_vbatched.%J.err
-#SBATCH --time=0:10:00
-#SBATCH --gres=gpu:v100:1
+#SBATCH -J RealDataset
+#SBATCH -o RealDataset.%J.out
+#SBATCH -e RealDataset.%J.err
+#SBATCH --time=2:00:00
+#SBATCH --gres=gpu:a100:1
 #SBATCH --mem=200G # try larger memory
 
-# make clean && make -j
+make clean && make -j
 
 N=900000
 N_TEST=100000
 BlockCount=(10000)
 BlockCount_TEST=(20000)
-NN_est=(100 200 200) # 300 400
+NN_est=(100 200 300 400)
 NN_pred=(200 400 600)
 DIM=10
 kernel_type=Matern72
-maxeval=(1000 2000 100) # 3000 4000
+maxeval=(1000 2000 1000 1000)
 fold=1
 
 DATA_DIR="./log"
@@ -84,9 +84,12 @@ do
                 echo "distance_scale: $distance_scale"
                 echo "distance_scale_init: $distance_scale_init"
                 echo "fold: $fold"
-                # Increment index for next iteration
-                ((index++))
             done
         done
+        # Increment index for next iteration
+        ((index++))
     done
 done
+
+mkdir -p ./log/RealDataset
+mv ./log/*RealDataset.csv ./log/RealDataset/

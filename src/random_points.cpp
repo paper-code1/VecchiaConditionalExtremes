@@ -467,13 +467,13 @@ std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata> &metadata, int 
 }
 
 // Function to read points concurrently, with each processor reading a specific chunk of rows
-std::vector<PointMetadata> readPointsConcurrently(const std::string &filename, const Opts &opts)
+std::vector<PointMetadata> readPointsConcurrently(const std::string &filename, int numBlocks, const Opts &opts)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int numPointsTotal = opts.numPointsTotal;
+    int numPointsTotal = numBlocks;
 
     // Calculate the number of rows each process should read
     int rows_per_process = numPointsTotal / size;
@@ -549,16 +549,19 @@ std::vector<PointMetadata> readPointsConcurrently(const std::string &filename, c
 void partitionPointsDirectly(
     const std::vector<PointMetadata> &localPoints,
     std::vector<std::vector<PointMetadata>> &finerPartitions,
+    int numBlocks,
     const Opts &opts)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+    int mm = numBlocks;
 
     // Check if we should use classic Vecchia (each point is its own cluster)
-    if (localPoints.size() <= 2 * opts.numBlocksPerProcess)
+    if (localPoints.size() <= 2 * mm)
     {
         // Classic Vecchia case - each point becomes its own cluster
+        std::cout << "Classic Vecchia case - each point becomes its own cluster" << std::endl;
         finerPartitions.clear();
         finerPartitions.resize(localPoints.size());
 
@@ -573,7 +576,7 @@ void partitionPointsDirectly(
     // Block Vecchia case - continue with the algorithm
     // Initialize finerPartitions with exactly opts.numBlocksPerProcess clusters
     finerPartitions.clear();
-    finerPartitions.resize(opts.numBlocksPerProcess);
+    finerPartitions.resize(mm);
 
     // 1. Randomly choose opts.numBlocksPerProcess points as centers on each node
     std::vector<PointMetadata> localCenters;
@@ -587,22 +590,22 @@ void partitionPointsDirectly(
     std::iota(indices.begin(), indices.end(), 0);
     std::shuffle(indices.begin(), indices.end(), gen);
 
-    centerIndices.resize(opts.numBlocksPerProcess);
-    localCenters.resize(opts.numBlocksPerProcess);
+    centerIndices.resize(mm);
+    localCenters.resize(mm);
 
     // Assign centers as the first point in each cluster
-    for (int i = 0; i < opts.numBlocksPerProcess; ++i)
+    for (int i = 0; i < mm; ++i)
     {
         centerIndices[i] = indices[i];
         localCenters[i] = localPoints[indices[i]];
         // Add the center as the first point in its cluster
-        finerPartitions[i].push_back(localCenters[i]);
+        // finerPartitions[i].push_back(localCenters[i]);
     }
 
     // 2. Gather all centers with their node labels and cluster indices
     // Prepare data for gathering: coordinates + observation + rank (as node label) + cluster index
     std::vector<double> localCentersData;
-    for (int i = 0; i < opts.numBlocksPerProcess; ++i)
+    for (int i = 0; i < mm; ++i)
     {
         for (int j = 0; j < opts.dim; ++j)
         {
@@ -658,18 +661,18 @@ void partitionPointsDirectly(
 #pragma omp parallel for
     for (size_t i = 0; i < localPoints.size(); ++i)
     {
-        // Skip points that are already centers
-        bool isCenter = false;
-        for (int j = 0; j < opts.numBlocksPerProcess; ++j)
-        {
-            if (i == centerIndices[j])
-            {
-                isCenter = true;
-                break;
-            }
-        }
-        if (isCenter)
-            continue;
+        // // Skip points that are already centers
+        // bool isCenter = false;
+        // for (int j = 0; j < opts.numBlocksPerProcess; ++j)
+        // {
+        //     if (i == centerIndices[j])
+        //     {
+        //         isCenter = true;
+        //         break;
+        //     }
+        // }
+        // if (isCenter)
+        //     continue;
 
         // find the min distance between the point and all centers
         double minDist = std::numeric_limits<double>::max();
@@ -751,8 +754,12 @@ void partitionPointsDirectly(
                   MPI_COMM_WORLD);
 
     // 5. Process received points and add them to their respective clusters
-    for (int i = 0; i < totalRecvSize; i += (opts.dim + 2))
-    {
+    int pointsPerRecord = opts.dim + 2; // Size of each point record in the buffer
+    int expectedPoints = totalRecvSize / pointsPerRecord;
+
+    // Process points with bounds checking
+    for (int i = 0; i < totalRecvSize; i += pointsPerRecord)
+    {   
         PointMetadata point;
         point.coordinates.resize(opts.dim);
 
@@ -762,8 +769,7 @@ void partitionPointsDirectly(
         }
         point.observation = recvBuffer[i + opts.dim];
         int clusterIndex = static_cast<int>(recvBuffer[i + opts.dim + 1]);
-
-        // Add point to its cluster (centers are already the first points)
+        // Add point to its cluster
         finerPartitions[clusterIndex].push_back(point);
     }
 }

@@ -428,10 +428,15 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)
-    checkMagmaError(magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        dinfo_magma, batchCount, queue));
+    // checkMagmaError(magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
+    //                     gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+    //                     dinfo_magma, batchCount, queue));
+    checkMagmaError(magma_dpotrf_vbatched_max_nocheck(
+            MagmaLower, d_lda_locs_neighbors,
+            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+            dinfo_magma, batchCount, max_m, queue));
     
+
     // trsm
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
     // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue);

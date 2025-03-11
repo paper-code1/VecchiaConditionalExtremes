@@ -31,7 +31,7 @@ void broadcastCenters(std::vector<std::vector<double>>& allCenters, int numCente
 std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int k, int dim, int maxIterations, int rank, int seed);
 
 // Function to read points from CSV files
-std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, const Opts& opts);
+std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, int numBlocks, const Opts& opts);
 
 // Function to perform random clustering
 std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, int k, int dim, int seed);
@@ -40,6 +40,7 @@ std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, in
 void partitionPointsDirectly(
     const std::vector<PointMetadata>& localPoints, 
     std::vector<std::vector<PointMetadata>>& finerPartitions, 
+    int numBlocks,
     const Opts& opts);
 
 #endif // RANDOM_POINTS_H
