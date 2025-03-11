@@ -571,13 +571,22 @@ void partitionPointsDirectly(
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-    int mm = numBlocks;
 
     // Check if we should use classic Vecchia (each point is its own cluster)
-    if (localPoints.size() <= 2 * mm)
+    if (localPoints.size() <= 2 * numBlocks)
     {
         // Classic Vecchia case - each point becomes its own cluster
-        std::cout << "Classic Vecchia case - each point becomes its own cluster" << std::endl;
+        if (rank == 0)
+        {
+            if (opts.numBlocksPerProcess == numBlocks){
+                // estimation 
+                std::cout << "Classic Vecchia case (estimation) - each point becomes its own cluster" << std::endl;
+            }
+            else{
+                // prediction
+                std::cout << "Classic Vecchia case (prediction) - each point becomes its own cluster" << std::endl;
+            }
+        }
         finerPartitions.clear();
         finerPartitions.resize(localPoints.size());
 
@@ -592,7 +601,7 @@ void partitionPointsDirectly(
     // Block Vecchia case - continue with the algorithm
     // Initialize finerPartitions with exactly opts.numBlocksPerProcess clusters
     finerPartitions.clear();
-    finerPartitions.resize(mm);
+    finerPartitions.resize(numBlocks);
 
     // 1. Randomly choose opts.numBlocksPerProcess points as centers on each node
     std::vector<PointMetadata> localCenters;
@@ -606,11 +615,11 @@ void partitionPointsDirectly(
     std::iota(indices.begin(), indices.end(), 0);
     std::shuffle(indices.begin(), indices.end(), gen);
 
-    centerIndices.resize(mm);
-    localCenters.resize(mm);
+    centerIndices.resize(numBlocks);
+    localCenters.resize(numBlocks);
 
     // Assign centers as the first point in each cluster
-    for (int i = 0; i < mm; ++i)
+    for (int i = 0; i < numBlocks; ++i)
     {
         centerIndices[i] = indices[i];
         localCenters[i] = localPoints[indices[i]];
@@ -621,7 +630,7 @@ void partitionPointsDirectly(
     // 2. Gather all centers with their node labels and cluster indices
     // Prepare data for gathering: coordinates + observation + rank (as node label) + cluster index
     std::vector<double> localCentersData;
-    for (int i = 0; i < mm; ++i)
+    for (int i = 0; i < numBlocks; ++i)
     {
         for (int j = 0; j < opts.dim; ++j)
         {

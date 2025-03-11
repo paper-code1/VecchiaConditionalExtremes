@@ -22,7 +22,7 @@ DIM=8
 kernel_type=Matern72
 maxeval=(500 1000 1000)
 
-export OMP_DISPLAY_AFFINITY=TRUE
+# export OMP_DISPLAY_AFFINITY=TRUE
 
 SPECIES=("O2" "N2" "H" "N" "O" "He") # 
 
@@ -76,7 +76,7 @@ do
                             --test_metadata_path "$test_metadata_path" \
                             --kernel_type "$kernel_type"\
                             --seed "$fold"\
-                            --nn_multiplier 200
+                            --nn_multiplier 10000
                         fi
                         current_maxeval=1
                     done

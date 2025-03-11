@@ -100,7 +100,7 @@ int main(int argc, char **argv)
                 break;
         }
         opts.distance_threshold_coarse = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier);
-        opts.distance_threshold_finer = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier/10);
+        opts.distance_threshold_finer = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier/100);
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;
