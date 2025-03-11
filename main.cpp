@@ -6,6 +6,7 @@
 #include <chrono>
 #include <thread>
 #include <iomanip>
+#include <fstream>
 #include <magma_v2.h>
 #include <omp.h>
 #include "input_parser.h"
@@ -71,6 +72,8 @@ int main(int argc, char **argv)
     }
 
     omp_set_num_threads(opts.omp_num_threads);
+    opts.distance_threshold_coarse = calculate_distance_threshold(opts.distance_scale, opts.numPointsTotal, opts.m, opts.nn_multiplier);
+    opts.distance_threshold_finer = calculate_distance_threshold(opts.distance_scale, opts.numPointsTotal, opts.m, opts.nn_multiplier/10);
 
     // Use the parsed options
     if (rank == 0) {
@@ -99,8 +102,6 @@ int main(int argc, char **argv)
                 exit(-1);
                 break;
         }
-        opts.distance_threshold_coarse = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier);
-        opts.distance_threshold_finer = calculate_distance_threshold(opts.distance_scale, opts.numBlocksPerProcess, opts.numPointsTotal, opts.m, opts.dim, opts.nn_multiplier/100);
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;
@@ -141,9 +142,9 @@ int main(int argc, char **argv)
     std::vector<PointMetadata> localPoints;
     std::vector<PointMetadata> localPoints_test;
     if (opts.train_metadata_path != ""){
-        localPoints = readPointsConcurrently(opts.train_metadata_path, opts.numBlocksPerProcess, opts);
+        localPoints = readPointsConcurrently(opts.train_metadata_path, opts.numPointsTotal, opts);
         if (opts.mode == "prediction"){
-            localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts.numBlocksPerProcess_test, opts);
+            localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts.numPointsTotal_test, opts);
         }
     }
     else{
@@ -230,7 +231,9 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
     
     // 3. Reorder centers at processor 0
-    std::cout << "Reordering centers" << std::endl;
+    if (rank == 0){
+        std::cout << "Reordering centers" << std::endl;
+    }
     auto start_reorder_centers = std::chrono::high_resolution_clock::now();
     reorderCenters(allCenters, opts);
     // Broadcast reordered centers to all processors
@@ -279,6 +282,11 @@ int main(int argc, char **argv)
     MPI_Allreduce(&duration_block_sending_seconds, &max_duration_block_sending, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
 
+    // print total point size of receivedBlocks and receivedBlocks size
+    int total_point_size = 0;
+    for (auto block : receivedBlocks){
+        total_point_size += block.blocks.size();
+    }
     // 4.3 NN searching
     if (rank == 0){
         std::cout << "Performing NN searching" << std::endl;

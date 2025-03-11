@@ -6,15 +6,15 @@
 #SBATCH -J benchmark_data_vbatched
 #SBATCH -o benchmark_data_vbatched.%J.out
 #SBATCH -e benchmark_data_vbatched.%J.err
-#SBATCH --time=00:10:00
+#SBATCH --time=20:00:00
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mem=200G # try larger memory
 
-make clean && make -j
+# make clean && make -j
 
 N=1800000
 N_TEST=200000
-BlockCount=(20000) # 20000
+BlockCount=(20000)
 BlockCount_TEST=(40000)
 NN_est=(100 200 400)
 NN_pred=(400 600)
@@ -76,7 +76,7 @@ do
                             --test_metadata_path "$test_metadata_path" \
                             --kernel_type "$kernel_type"\
                             --seed "$fold"\
-                            --nn_multiplier 10000
+                            --nn_multiplier 500
                         fi
                         current_maxeval=1
                     done

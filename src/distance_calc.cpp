@@ -89,14 +89,18 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     allCenterRanks.insert(allCenterRanks.end(), CenterRanks_test.begin(), CenterRanks_test.end());
 
     // For each center in combined CenterRanks
-    for (const auto &centerRank : allCenterRanks) {
+    for (int i=0; i<allCenterRanks.size(); ++i){
+        const auto &centerRank = allCenterRanks[i];
         const auto &center = centerRank.first;
         int destRank = centerRank.second;
         
         // For each block, check if it's within distance threshold of this center
         for (const auto &blockInfo : blockInfos) {
             int globalOrder = blockInfo.globalOrder;
-            
+            if (globalOrder >= i){
+                continue;
+            }
+
             // Send first m_const blocks to all processors to ensure enough blocks
             if (globalOrder < m_const) {
                 for (int dest = 0; dest < size; ++dest) {
@@ -110,7 +114,6 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             
             // Calculate distance between block center and the current center
             double distance = calculateDistance(blockInfo.center, center);
-            
             // If within threshold, send to the corresponding rank
             if (distance < distance_threshold) {
                 if (blockIndexSets[destRank].find(globalOrder) == blockIndexSets[destRank].end()) {
@@ -121,22 +124,28 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
         }
     }
 
-    // Pack data into buffers
-    std::vector<std::vector<double>> packedSendBuffers(size);
+    // Directly prepare data for MPI_Alltoallv without using pack/unpack functions
+    // First, calculate the size of each buffer to send
+    std::vector<int> sendCounts(size, 0);
     for (int dest = 0; dest < size; ++dest) {
-        packBlockInfo(sendBuffers[dest], packedSendBuffers[dest]);
+        for (const auto& block : sendBuffers[dest]) {
+            // Count elements for each block:
+            // 2 for localOrder and globalOrder
+            // opts.dim for center coordinates
+            // 1 for number of points
+            // numPoints * opts.dim for block coordinates
+            // numPoints for observations
+            int numPoints = block.blocks.size();
+            sendCounts[dest] += 2 + opts.dim + 1 + (numPoints * opts.dim) + numPoints;
+        }
     }
 
-    // Prepare to send data using MPI_Alltoallv
-    std::vector<int> sendCounts(size), sendDispls(size);
-    std::vector<int> recvCounts(size), recvDispls(size);
-
-    for (int dest = 0; dest < size; ++dest) {
-        sendCounts[dest] = packedSendBuffers[dest].size();
-    }
-
+    // Exchange send counts to get receive counts
+    std::vector<int> recvCounts(size);
     MPI_Alltoall(sendCounts.data(), 1, MPI_INT, recvCounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
+    // Calculate displacements
+    std::vector<int> sendDispls(size), recvDispls(size);
     int totalSendCount = 0, totalRecvCount = 0;
     for (int i = 0; i < size; ++i) {
         sendDispls[i] = totalSendCount;
@@ -145,15 +154,77 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
         totalRecvCount += recvCounts[i];
     }
 
-    std::vector<double> sendBuffer(totalSendCount), recvBuffer(totalRecvCount);
+    // Prepare send buffer
+    std::vector<double> sendBuffer(totalSendCount);
+    int currentPos = 0;
     for (int dest = 0; dest < size; ++dest) {
-        std::copy(packedSendBuffers[dest].begin(), packedSendBuffers[dest].end(), sendBuffer.begin() + sendDispls[dest]);
+        for (const auto& block : sendBuffers[dest]) {
+            // Add localOrder and globalOrder
+            sendBuffer[currentPos++] = static_cast<double>(block.localOrder);
+            sendBuffer[currentPos++] = static_cast<double>(block.globalOrder);
+            
+            // Add center coordinates
+            for (const auto& coord : block.center) {
+                sendBuffer[currentPos++] = coord;
+            }
+            
+            // Add number of points
+            sendBuffer[currentPos++] = static_cast<double>(block.blocks.size());
+            
+            // Add block coordinates
+            for (const auto& point : block.blocks) {
+                for (const auto& coord : point) {
+                    sendBuffer[currentPos++] = coord;
+                }
+            }
+            
+            // Add observations
+            for (const auto& obs : block.observations_blocks) {
+                sendBuffer[currentPos++] = obs;
+            }
+        }
     }
 
-    MPI_Alltoallv(sendBuffer.data(), sendCounts.data(), sendDispls.data(), MPI_DOUBLE, recvBuffer.data(), recvCounts.data(), recvDispls.data(), MPI_DOUBLE, MPI_COMM_WORLD);
+    // Prepare receive buffer
+    std::vector<double> recvBuffer(totalRecvCount);
 
-    // Unpack received data
-    std::vector<BlockInfo> receivedBlocks = unpackBlockInfo(recvBuffer, opts);
+    // Perform the all-to-all communication
+    MPI_Alltoallv(sendBuffer.data(), sendCounts.data(), sendDispls.data(), MPI_DOUBLE,
+                 recvBuffer.data(), recvCounts.data(), recvDispls.data(), MPI_DOUBLE, MPI_COMM_WORLD);
+
+    // Unpack received data directly
+    std::vector<BlockInfo> receivedBlocks;
+    size_t i = 0;
+    while (i < recvBuffer.size()) {
+        BlockInfo block;
+        block.localOrder = static_cast<int>(recvBuffer[i++]);
+        block.globalOrder = static_cast<int>(recvBuffer[i++]);
+        
+        // Unpack center coordinates
+        block.center.resize(opts.dim);
+        for (int j = 0; j < opts.dim; ++j) {
+            block.center[j] = recvBuffer[i++];
+        }
+        
+        // Unpack number of points
+        int numPoints = static_cast<int>(recvBuffer[i++]);
+        
+        // Unpack block coordinates
+        block.blocks.resize(numPoints, std::vector<double>(opts.dim));
+        for (int j = 0; j < numPoints; ++j) {
+            for (int k = 0; k < opts.dim; ++k) {
+                block.blocks[j][k] = recvBuffer[i++];
+            }
+        }
+        
+        // Unpack observations
+        block.observations_blocks.resize(numPoints);
+        for (int j = 0; j < numPoints; ++j) {
+            block.observations_blocks[j] = recvBuffer[i++];
+        }
+        
+        receivedBlocks.push_back(block);
+    }
 
     return receivedBlocks;
 }
@@ -161,6 +232,9 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
 
 void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<BlockInfo> &receivedBlocks, const Opts& opts, bool pred_tag)
 {
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     // Reorder received blocks based on globalOrder
     std::sort(receivedBlocks.begin(), receivedBlocks.end(), [](const BlockInfo& a, const BlockInfo& b) {
         return a.globalOrder < b.globalOrder;
@@ -181,18 +255,18 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
             }
             for (size_t j = 0; j < prevBlock.blocks.size(); ++j) {
                 double distance = calculateDistance(block.center, prevBlock.blocks[j]);
-                // Add all points if the block order is small
+                // Add all points if the block order is within the range
                 if (distance < distance_threshold || block.globalOrder <= 200){
                     distancesMeta.emplace_back(distance, prevBlock.blocks[j], prevBlock.observations_blocks[j]);
                 }
             }
         }
         // add cases for the classic Vecchia
-        if (block.globalOrder <= m_nn && block.blocks.size() == 1){
+        if (block.globalOrder <= m_nn && opts.numBlocksPerProcess == opts.numPointsPerProcess){
             continue;
         }
         if (distancesMeta.size() < m_nn && block.globalOrder > 0){
-            std::cout << "Warning: Not enough neighbors found for block, random added. " << "m: " << distancesMeta.size() << ", block: " << block.globalOrder << std::endl;
+            std::cout << "Warning: Not enough neighbors found for block, random added. " << "m: " << distancesMeta.size() << ", block: " << block.globalOrder << ", rank: " << rank << std::endl;
             for (auto& prevBlock: receivedBlocks) {
                 if (prevBlock.globalOrder >= block.globalOrder) {
                     break;
@@ -260,7 +334,7 @@ void distanceDeScale(std::vector<BlockInfo> &localBlocks, const std::vector<doub
 }
 
 // Add this function before main()
-double calculate_distance_threshold(const std::vector<double>& distance_scale, int numBlocksPerProcess, int numPointsTotal, int m, int dim_process, int nn_multiplier) {
+double calculate_distance_threshold(const std::vector<double>& distance_scale, int numPointsTotal, int m, int nn_multiplier) {
     // add a factor to account for the non-uniform distirbution
     int nn_m = m * nn_multiplier;
     // Count dimensions with distance_scale > 1
