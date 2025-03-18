@@ -249,7 +249,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
         // tuple: distance, point, observation
         std::vector<std::tuple<double, std::vector<double>, double>> distancesMeta;
 
-        for (auto& prevBlock: receivedBlocks) {
+        for (auto& prevBlock : receivedBlocks) {
             if (prevBlock.globalOrder >= block.globalOrder){
                 break;
             }
@@ -267,7 +267,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
         }
         if (distancesMeta.size() < m_nn && block.globalOrder > 0){
             std::cout << "Warning: Not enough neighbors found for block, random added. " << "m: " << distancesMeta.size() << ", block: " << block.globalOrder << ", rank: " << rank << std::endl;
-            for (auto& prevBlock: receivedBlocks) {
+            for (auto& prevBlock : receivedBlocks) {
                 if (prevBlock.globalOrder >= block.globalOrder) {
                     break;
                 }
@@ -307,7 +307,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
 
 void distanceScale(std::vector<PointMetadata> &localPoints, const std::vector<double>& scale_factor, int dim){
     #pragma omp parallel for
-    for (auto& point: localPoints){
+    for (auto& point : localPoints){
         for (int i = 0; i < dim; ++i){
             point.coordinates[i] = point.coordinates[i] / scale_factor[i];
         }
@@ -316,16 +316,16 @@ void distanceScale(std::vector<PointMetadata> &localPoints, const std::vector<do
 
 void distanceDeScale(std::vector<BlockInfo> &localBlocks, const std::vector<double>& scale_factor, int dim){
     #pragma omp parallel for
-    for (auto& block: localBlocks){
-        for (auto& point: block.blocks){
+    for (auto& block : localBlocks){
+        for (auto& point : block.blocks){
             for (int i = 0; i < dim; ++i){
                 point[i] = point[i] * scale_factor[i];
             }
         }
     }
     #pragma omp parallel for
-    for (auto& block: localBlocks){
-        for (auto& point: block.nearestNeighbors){
+    for (auto& block : localBlocks){
+        for (auto& point : block.nearestNeighbors){
             for (int i = 0; i < dim; ++i){
                 point[i] = point[i] * scale_factor[i];
             }

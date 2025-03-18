@@ -5,7 +5,7 @@ This repository contains code for performing BSV for GPs
 ## Prerequisites
 
 - gcc (>=10.2.0)
-- mkl (>=2020)
+- MAGMA (>=2.7.0)
 - NLOPT (>=2.7.0)
 - CMake (>=3.21)
 - CUDA (>=11.6)
