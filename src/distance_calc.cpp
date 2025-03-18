@@ -307,27 +307,27 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
 
 void distanceScale(std::vector<PointMetadata> &localPoints, const std::vector<double>& scale_factor, int dim){
     #pragma omp parallel for
-    for (auto& point : localPoints){
-        for (int i = 0; i < dim; ++i){
-            point.coordinates[i] = point.coordinates[i] / scale_factor[i];
+    for (int i = 0; i < localPoints.size(); ++i){
+        for (int j = 0; j < dim; ++j){
+            localPoints[i].coordinates[j] = localPoints[i].coordinates[j] / scale_factor[j];
         }
     }
 }
 
 void distanceDeScale(std::vector<BlockInfo> &localBlocks, const std::vector<double>& scale_factor, int dim){
     #pragma omp parallel for
-    for (auto& block : localBlocks){
-        for (auto& point : block.blocks){
-            for (int i = 0; i < dim; ++i){
-                point[i] = point[i] * scale_factor[i];
+    for (int i = 0; i < localBlocks.size(); ++i){
+        for (int j = 0; j < localBlocks[i].blocks.size(); ++j){
+            for (int k = 0; k < dim; ++k){
+                localBlocks[i].blocks[j][k] = localBlocks[i].blocks[j][k] * scale_factor[k];
             }
         }
     }
     #pragma omp parallel for
-    for (auto& block : localBlocks){
-        for (auto& point : block.nearestNeighbors){
-            for (int i = 0; i < dim; ++i){
-                point[i] = point[i] * scale_factor[i];
+    for (int i = 0; i < localBlocks.size(); ++i){
+        for (int j = 0; j < localBlocks[i].nearestNeighbors.size(); ++j){
+            for (int k = 0; k < dim; ++k){
+                localBlocks[i].nearestNeighbors[j][k] = localBlocks[i].nearestNeighbors[j][k] * scale_factor[k];
             }
         }
     }
