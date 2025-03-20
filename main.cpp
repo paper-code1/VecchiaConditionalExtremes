@@ -172,7 +172,25 @@ int main(int argc, char **argv)
     if (opts.mode == "prediction"){
         distanceScale(localPoints_test, opts.distance_scale, opts.dim);
     }
-    
+
+    // do (coarser) partition
+    std::vector<PointMetadata> localPoints_partition;
+    std::vector<PointMetadata> localPoints_partition_test;
+
+    if (opts.partition == "linear"){
+        partitionPoints(localPoints, localPoints_partition, opts);
+        if (opts.mode == "prediction"){
+            partitionPoints(localPoints_test, localPoints_partition_test, opts);
+        }
+    }
+    else if (opts.partition == "none"){
+        localPoints_partition = localPoints;
+        if (opts.mode == "prediction"){
+            localPoints_partition_test = localPoints_test;
+        }
+    }
+    std::cout << "rank: " << rank << ", Number of points in localPoints: " << localPoints_partition.size() << std::endl;
+
     auto start_total = std::chrono::high_resolution_clock::now();
 
     // 2.1 Partition points and communicate them
@@ -182,9 +200,9 @@ int main(int argc, char **argv)
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<PointMetadata>> finerPartitions;
     std::vector<std::vector<PointMetadata>> finerPartitions_test;
-    partitionPointsDirectly(localPoints, finerPartitions, opts.numBlocksPerProcess, opts);
+    partitionPointsDirectly(localPoints_partition, finerPartitions, opts.numBlocksPerProcess, opts);
     if (opts.mode == "prediction"){
-        partitionPointsDirectly(localPoints_test, finerPartitions_test, opts.numBlocksPerProcess_test, opts);
+        partitionPointsDirectly(localPoints_partition_test, finerPartitions_test, opts.numBlocksPerProcess_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
@@ -287,6 +305,7 @@ int main(int argc, char **argv)
     for (auto block : receivedBlocks){
         total_point_size += block.blocks.size();
     }
+    std::cout << "rank: " << rank << ", total_point_size: " << total_point_size << std::endl;
     // 4.3 NN searching
     if (rank == 0){
         std::cout << "Performing NN searching" << std::endl;

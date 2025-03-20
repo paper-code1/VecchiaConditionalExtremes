@@ -63,12 +63,15 @@ void partitionPoints(const std::vector<PointMetadata> &localMetadata, std::vecto
     // Prepare to send data to the appropriate process based on x value
     std::vector<int> sendCounts(size, 0);
     std::vector<int> sendDisplacements(size, 0);
+    // choose the most relevant scaling parameters (max index of opts.distance_scale)
+    int min_index = std::min_element(opts.distance_scale.begin(), opts.distance_scale.end()) - opts.distance_scale.begin();
+    double min_distance_scale = opts.distance_scale[min_index];
 
     std::vector<std::vector<PointMetadata>> sendBuffers(size);
 
     for (const auto &pointmeta : localMetadata)
     {
-        int targetProcess = std::min(static_cast<int>(pointmeta.coordinates[0] * size), size - 1);
+        int targetProcess = std::min(static_cast<int>(pointmeta.coordinates[min_index] * min_distance_scale * size), size - 1);
         sendBuffers[targetProcess].push_back(pointmeta);
     }
 

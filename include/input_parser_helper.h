@@ -47,6 +47,7 @@ struct Opts
     // kmeans and optimization
     int kmeans_max_iter;
     std::string clustering;
+    std::string partition;
     int current_iter;
     int maxeval;
     int nn_multiplier;
