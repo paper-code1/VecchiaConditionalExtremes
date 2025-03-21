@@ -204,10 +204,14 @@ int main(int argc, char **argv)
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<PointMetadata>> finerPartitions;
     std::vector<std::vector<PointMetadata>> finerPartitions_test;
-    partitionPointsDirectly(localPoints_partition, finerPartitions, opts.numBlocksPerProcess, opts);
+    finerPartition(localPoints_partition, opts.numBlocksPerProcess, finerPartitions, opts);
     if (opts.mode == "prediction"){
-        partitionPointsDirectly(localPoints_partition_test, finerPartitions_test, opts.numBlocksPerProcess_test, opts);
+        finerPartition(localPoints_partition_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts);
     }
+    // partitionPointsDirectly(localPoints_partition, finerPartitions, opts.numBlocksPerProcess, opts);
+    // if (opts.mode == "prediction"){
+    //     partitionPointsDirectly(localPoints_partition_test, finerPartitions_test, opts.numBlocksPerProcess_test, opts);
+    // }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_preprocessing = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_preprocessing = end_preprocessing - start_preprocessing;
@@ -310,6 +314,7 @@ int main(int argc, char **argv)
         total_point_size += block.blocks.size();
     }
     std::cout << "rank: " << rank << ", total_point_size: " << total_point_size << std::endl;
+    MPI_Barrier(MPI_COMM_WORLD);
     // 4.3 NN searching
     if (rank == 0){
         std::cout << "Performing NN searching" << std::endl;
