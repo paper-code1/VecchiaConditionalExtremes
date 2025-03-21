@@ -186,6 +186,9 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     //     opts.maxeval = 1;
     // }
     opts.num_simulations = result["num_simulations"].as<int>();
+    opts.time_cholesky_trsm_gemm = 0;
+    opts.time_cholesky_trsm = 0;
+    opts.time_covgen = 0;
     return true;
 }
 

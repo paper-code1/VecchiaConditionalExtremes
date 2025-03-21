@@ -66,6 +66,12 @@ struct Opts
     KernelType kernel_type;
     int range_offset;
 
+    // timing
+    float time_covgen;
+    float time_cholesky_trsm_gemm;
+    float time_cholesky_trsm;
+
+    // paths
     std::string train_metadata_path;
     std::string test_metadata_path;
     std::vector<double> theta;

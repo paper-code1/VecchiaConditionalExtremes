@@ -31,6 +31,7 @@ void saveTimeAndGflops(
         file << "RAC_partitioning,centers_of_gravity_calculation,send_centers_of_gravity,reorder_centers,create_block_info,block_sending,nn_searching,gpu_copy,computation,cleanup_gpu,total,total_gflops,numPointsPerProcess,numPointsTotal,numBlocksPerProcess,numBlocksTotal,m,seed,mspe,rmspe,ci_coverage,optimized_log_likelihood,iters" <<std::endl;
     }
     file << std::setprecision(15) << duration_RAC_partitioning << "," << duration_centers_of_gravity << "," << duration_send_centers_of_gravity << "," << duration_reorder_centers << "," << duration_create_block_info << "," << duration_block_sending << "," << duration_nn_searching << "," << duration_gpu_copy << "," << duration_computation << "," << duration_cleanup_gpu << "," << duration_total << "," << total_gflops << "," << numPointsPerProcess << "," << numPointsTotal << "," << numBlocksPerProcess << "," << numBlocksTotal << "," << m << "," << seed << "," << mspe << "," << rmspe << "," << ci_coverage << "," << optimized_log_likelihood << "," << opts.current_iter << std::endl;
+    file.close();
 
     // save the theta to a file
     std::string thetaFileName = logDir + "/theta_numPointsTotal" + std::to_string(opts.numPointsTotal) + "_numBlocksTotal" + std::to_string(opts.numBlocksTotal) + "_m" + std::to_string(opts.m) + "_seed" + std::to_string(opts.seed) + "_isScaled" + std::to_string(is_scaled) + "_" + opts.log_append + ".csv";
@@ -40,6 +41,7 @@ void saveTimeAndGflops(
         thetaFile << new_theta[i] << ",";
     }
     thetaFile << std::endl;
+    thetaFile.close();
 }
 
 

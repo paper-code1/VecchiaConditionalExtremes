@@ -38,10 +38,11 @@ double objective_function(const std::vector<double> &x, std::vector<double> &gra
     
     // Negate the log-likelihood because NLopt minimizes by default
     double result = -performComputationOnGPU(*gpuData, x, *opts);
-    
+
+    opts->current_iter++;
     // Print optimization info
     if (opt_data->rank == 0 && opts->print) {
-        std::cout << "Optimization step: " << opts->current_iter++ << ", ";
+        std::cout << "Optimization step: " << opts->current_iter << ", ";
         std::cout << "f(theta): " << std::fixed << std::setprecision(6) << -result << ", ";
         std::cout << "Theta: ";
         for (const auto& val : x) {
@@ -73,7 +74,10 @@ int main(int argc, char **argv)
 
     omp_set_num_threads(opts.omp_num_threads);
     opts.distance_threshold_coarse = calculate_distance_threshold(opts.distance_scale, opts.numPointsTotal, opts.m, opts.nn_multiplier);
-    opts.distance_threshold_finer = calculate_distance_threshold(opts.distance_scale, opts.numPointsTotal, opts.m, opts.nn_multiplier/10);
+    opts.distance_threshold_finer = calculate_distance_threshold(opts.distance_scale, opts.numPointsTotal, opts.m, opts.nn_multiplier);
+    opts.time_covgen = 0;
+    opts.time_cholesky_trsm_gemm = 0;
+    opts.time_cholesky_trsm = 0;
 
     // Use the parsed options
     if (rank == 0) {

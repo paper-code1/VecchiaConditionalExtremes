@@ -322,7 +322,7 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
 }
 
 // Function to perform computation on the GPU
-double performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts)
+double performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -399,6 +399,13 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[0] << std::endl;
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
     // magma_dprint_gpu_custom(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue, 5);
+    // Add timing variables
+    cudaEvent_t start, stop;
+    float milliseconds_covgen = 0;
+    checkCudaError(cudaEventCreate(&start));
+    checkCudaError(cudaEventCreate(&stop));
+    // Start timing
+    checkCudaError(cudaEventRecord(start, stream));
     
     compute_covariance_vbatched(gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
@@ -421,8 +428,11 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                 gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    // Synchronize to make sure the kernel has finished
-    checkCudaError(cudaStreamSynchronize(stream));
+    
+     // Stop timing
+    checkCudaError(cudaEventRecord(stop, stream));
+    checkCudaError(cudaEventSynchronize(stop));
+    checkCudaError(cudaEventElapsedTime(&milliseconds_covgen, start, stop));
 
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
     
@@ -431,12 +441,13 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // checkMagmaError(magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
     //                     gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
     //                     dinfo_magma, batchCount, queue));
+    // Start timing
+    checkCudaError(cudaEventRecord(start, stream));
+    float milliseconds_cholesky_trsm_gemm = 0;
     checkMagmaError(magma_dpotrf_vbatched_max_nocheck(
             MagmaLower, d_lda_locs_neighbors,
             gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
             dinfo_magma, batchCount, max_m, queue));
-    
-
     // trsm
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
     // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue);
@@ -474,7 +485,11 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                              max_n1, max_n2, max_m,
                              queue);
     // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
-    checkCudaError(cudaStreamSynchronize(stream));
+    // Stop timing
+    checkCudaError(cudaEventRecord(stop, stream));
+    checkCudaError(cudaEventSynchronize(stop));
+    checkCudaError(cudaEventElapsedTime(&milliseconds_cholesky_trsm_gemm, start, stop));
+
     // std::cout << "before cholesky factorization" << std::endl;
     // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
     // magma_dprint_gpu(gpuData.lda_locs[1], gpuData.lda_locs[1], gpuData.h_cov_correction_array[0], gpuData.ldda_cov[1], queue);
@@ -504,6 +519,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_correction_array[0], gpuData.ldda_cov[0], queue);
     // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
     // copy and print dinfo_magma
+    // Start timing
+    checkCudaError(cudaEventRecord(start, stream));
     checkMagmaError(magma_dpotrf_vbatched(
             MagmaLower, d_lda_locs,
             gpuData.d_cov_array, d_ldda_cov,
@@ -517,7 +534,11 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
         gpuData.d_cov_array, d_ldda_cov,
         gpuData.d_observations_copy_array, d_ldda_locs,
         batchCount, queue);
-    checkCudaError(cudaStreamSynchronize(stream));
+    // Stop timing
+    checkCudaError(cudaEventRecord(stop, stream));
+    checkCudaError(cudaEventSynchronize(stop));
+    float milliseconds_cholesky_trsm = 0;
+    checkCudaError(cudaEventElapsedTime(&milliseconds_cholesky_trsm, start, stop));
 
     // norm for all blocks
     double norm2_item = norm2_batch(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
@@ -530,6 +551,9 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     //print log_det_item and norm2_item
     // std::cout << "batchcount: " << batchCount << ", log_det_item: " << log_det_item << ", norm2_item: " << norm2_item << std::endl;
     double log_likelihood_all = 0;
+    opts.time_cholesky_trsm_gemm += milliseconds_cholesky_trsm_gemm;
+    opts.time_cholesky_trsm += milliseconds_cholesky_trsm;
+    opts.time_covgen += milliseconds_covgen;
     // mpi sum for log-likelihood
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
