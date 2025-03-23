@@ -34,7 +34,7 @@ for N in ${N_all[@]}; do
                 bc=$((N/N_b))
                 m_bv=$M_est
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i"
-                if [ \( $N -le 4000000 -a $m_bv -eq 400 \) -o \( $N -gt 8000000 -a $m_bv -eq 100 \) -o \( $N -gt 16000000 -a $m_bv -eq 100 \) ]; then
+                if [ \( $N -le 4000000 -a $m_bv -eq 400 \) -o \( $N -le 8000000 -a $m_bv -eq 200 \) -o \( $N -le 16000000 -a $m_bv -eq 100 \) ]; then
                     ./bin/dbv \
                         --num_total_points $N \
                         --num_total_blocks $bc \
