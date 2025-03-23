@@ -1,13 +1,23 @@
 #----------------complier configurations-------------------------
-_SUPPORT_VECCHIA_?=TRUE
+# _SUPPORT_VECCHIA_?=TRUE
 _USE_MAGMA_?=TRUE
 #specify cuda directory
 _CUDA_ROOT_=$(CUDA_HOME)
-_CUDA_ARCH_ ?= 70
+# _CUDA_ARCH_ ?= 70
 CUDA_ROOT=$(_CUDA_ROOT_)
 
 #----------------compliers -------------------------
-CXX = CC # mpic++ #mpic++/cc
+# Default to Cray system unless specified otherwise
+SYSTEM ?= OPENMPI
+# SYSTEM options: CRAY, OPENMPI
+
+ifeq ($(SYSTEM),CRAY)
+  CXX = CC
+else ifeq ($(SYSTEM),OPENMPI)
+  CXX = mpic++
+else
+  $(error Unknown system type: $(SYSTEM). Use CRAY or OPENMPI)
+endif
 #NVCC=$(_CUDA_ROOT_)/bin/nvcc
 NVCC=nvcc
 
@@ -46,8 +56,9 @@ INCLUDES+= -I${NLOPT_ROOT}/include
 
 LIB_PATH=
 LIB_PATH+= -L${CUDA_ROOT}/targets/sbsa-linux/lib  #GH 200 system
+LIB_PATH+= -L${CUDA_ROOT}/lib64  # A100 system
 LIB_PATH+= -L${NLOPT_ROOT}/lib64 # GH200 system
-LIB_PATH+= -L${NLOPT_ROOT}/lib
+LIB_PATH+= -L${NLOPT_ROOT}/lib # A100 system
 # LIB_PATH+= -L${GSL_ROOT}/lib  // used for matern kernel, bessel function
 
 ifdef _USE_MAGMA_

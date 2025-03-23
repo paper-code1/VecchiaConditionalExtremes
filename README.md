@@ -9,11 +9,12 @@ This repository contains code for performing BSV for GPs
 - NLOPT (>=2.7.0)
 - CMake (>=3.21)
 - CUDA (>=11.6)
-- openmpi (>= 4.1.0)
+- openmpi (>= 4.1.0) // 
 
 ## Installation
 
-Clone the repository and `make -j`
-
+`git clone ****`
+`make SYSTEM=CRAY       # Uses Cray CC by default`
+`or make SYSTEM=OPENMPI   # Uses OpenMPI mpic++`
 ## Example
 `bash ./experiments/Job_A100_singl.sh` (if you are not in slurm, please change the srun into mpirun)
