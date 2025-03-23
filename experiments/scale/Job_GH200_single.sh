@@ -83,5 +83,5 @@ for N in ${N_all[@]}; do
     fi
 done
 
-mkdir -p ./log/A100_single
-mv ./log/*_A100_single.csv ./log/A100_single/
+mkdir -p ./log/GH200_single
+mv ./log/*_GH200_single.csv ./log/GH200_single/
