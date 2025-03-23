@@ -161,7 +161,7 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
     std::vector<int> clusterSizes(k, 1); // Initialize with 1 because we already assigned centers
 
 // 2. Assign remaining points to nearest center
-// #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static)
     for (int i = 0; i < numPoints; ++i)
     {
         // Skip if this point is a center
@@ -213,6 +213,7 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
         }
 
         clusters[i] = nearestCluster;
+        #pragma omp atomic
         clusterSizes[nearestCluster]++;
     }
     // Print statistics about cluster sizes

@@ -11,7 +11,7 @@
 #SBATCH --constraint=a100
 #SBATCH --mem=1000G # try larger memory
 
-N_base_strong=(2000000) # larger problem BSV 100/400 A100
+N_base_strong=(4000000) # larger problem BSV 100/400 A100
 
 # make clean && make -j
 
@@ -20,7 +20,7 @@ N_bs=(100)
 
 DIM=10
 theta_init=1.0,0.001
-distance_scale=0.05,0.5,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
+distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
 # base scaling

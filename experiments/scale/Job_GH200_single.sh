@@ -23,7 +23,7 @@ M_ests=(100 200 400)
 
 DIM=10
 theta_init=1.0,0.001
-distance_scale=0.05,0.5,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
+distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
 for N in ${N_all[@]}; do
