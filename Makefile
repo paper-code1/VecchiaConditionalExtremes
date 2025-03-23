@@ -45,8 +45,9 @@ INCLUDES+= -I${NLOPT_ROOT}/include
 # INCLUDES+= -I${GSL_ROOT}/include // used for matern kernel, bessel function
 
 LIB_PATH=
-LIB_PATH+= -L${CUDA_ROOT}/targets/sbsa-linux/lib
-LIB_PATH+= -L${NLOPT_ROOT}/lib64
+LIB_PATH+= -L${CUDA_ROOT}/targets/sbsa-linux/lib  #GH 200 system
+LIB_PATH+= -L${NLOPT_ROOT}/lib64 # GH200 system
+LIB_PATH+= -L${NLOPT_ROOT}/lib
 # LIB_PATH+= -L${GSL_ROOT}/lib  // used for matern kernel, bessel function
 
 ifdef _USE_MAGMA_
