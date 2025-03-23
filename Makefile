@@ -71,9 +71,9 @@ LIB= -lm
 LIB+= -lnlopt  
 # LIB+= -lgsl // used for matern kernel, bessel function
 ifdef _USE_MAGMA_
-	LIB+= -lmagma #-lcusparse
+	LIB+= -lmagma -lcusparse
 endif
-LIB+= -lcudart # -lcublas -lcudart
+LIB+= -lcudart -lcublas
 LIB+= -lgomp
 LIB+= -lstdc++
 
