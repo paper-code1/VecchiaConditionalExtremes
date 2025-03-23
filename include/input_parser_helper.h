@@ -47,6 +47,7 @@ struct Opts
     // kmeans and optimization
     int kmeans_max_iter;
     std::string clustering;
+    std::string partition;
     int current_iter;
     int maxeval;
     int nn_multiplier;
@@ -65,6 +66,12 @@ struct Opts
     KernelType kernel_type;
     int range_offset;
 
+    // timing
+    float time_covgen;
+    float time_cholesky_trsm_gemm;
+    float time_cholesky_trsm;
+
+    // paths
     std::string train_metadata_path;
     std::string test_metadata_path;
     std::vector<double> theta;

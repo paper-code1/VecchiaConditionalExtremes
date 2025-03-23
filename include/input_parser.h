@@ -46,6 +46,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("xtol_rel", "Relative tolerance for optimization", cxxopts::value<double>()->default_value("1e-5"))
     ("ftol_rel", "Relative tolerance of function for optimization", cxxopts::value<double>()->default_value("1e-5"))
     ("mode", "Mode type (estimation or prediction)", cxxopts::value<std::string>()->default_value("estimation"))
+    ("partition", "Partition type (linear or none)", cxxopts::value<std::string>()->default_value("linear"))
     ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("1000"))
     ("omp_num_threads", "Number of threads for OpenMP", cxxopts::value<int>()->default_value("20"))
     ("log_append", "Append to the log file", cxxopts::value<std::string>()->default_value(""))
@@ -178,12 +179,16 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.ftol_rel = result["ftol_rel"].as<double>();
     opts.current_iter = result["current_iter"].as<int>();
     opts.clustering = result["clustering"].as<std::string>();
+    opts.partition = result["partition"].as<std::string>();
     opts.mode = result["mode"].as<std::string>();
     // if (opts.mode == "performance"){
     //     opts.print = true;
     //     opts.maxeval = 1;
     // }
     opts.num_simulations = result["num_simulations"].as<int>();
+    opts.time_cholesky_trsm_gemm = 0;
+    opts.time_cholesky_trsm = 0;
+    opts.time_covgen = 0;
     return true;
 }
 

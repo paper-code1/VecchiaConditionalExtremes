@@ -63,12 +63,15 @@ void partitionPoints(const std::vector<PointMetadata> &localMetadata, std::vecto
     // Prepare to send data to the appropriate process based on x value
     std::vector<int> sendCounts(size, 0);
     std::vector<int> sendDisplacements(size, 0);
+    // choose the most relevant scaling parameters (max index of opts.distance_scale)
+    int min_index = std::min_element(opts.distance_scale.begin(), opts.distance_scale.end()) - opts.distance_scale.begin();
+    double min_distance_scale = opts.distance_scale[min_index];
 
     std::vector<std::vector<PointMetadata>> sendBuffers(size);
 
     for (const auto &pointmeta : localMetadata)
     {
-        int targetProcess = std::min(static_cast<int>(pointmeta.coordinates[0] * size), size - 1);
+        int targetProcess = std::min(static_cast<int>(pointmeta.coordinates[min_index] * min_distance_scale * size), size - 1);
         sendBuffers[targetProcess].push_back(pointmeta);
     }
 
@@ -130,9 +133,14 @@ void partitionPoints(const std::vector<PointMetadata> &localMetadata, std::vecto
 // Function to perform random clustering
 std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, int k, int dim, int seed)
 {
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     int numPoints = metadata.size();
     std::vector<int> clusters(numPoints);
-
+    int block_size = numPoints / k;
+    float alpha_expansion = 1.5;
+    
     // Initialize random number generator
     std::mt19937 gen(seed);
 
@@ -149,8 +157,11 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
         clusters[centerIndices[i]] = i;
     }
 
+    // Track the size of each cluster
+    std::vector<int> clusterSizes(k, 1); // Initialize with 1 because we already assigned centers
+
 // 2. Assign remaining points to nearest center
-#pragma omp parallel for schedule(static)
+// #pragma omp parallel for schedule(static)
     for (int i = 0; i < numPoints; ++i)
     {
         // Skip if this point is a center
@@ -163,6 +174,10 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
         // Find nearest center
         for (int j = 0; j < k; ++j)
         {
+            // Skip clusters that have reached their size limit
+            if (clusterSizes[j] >= alpha_expansion * block_size)
+                continue;
+                
             double dist = 0.0;
             for (int d = 0; d < dim; ++d)
             {
@@ -177,7 +192,38 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
             }
         }
 
+        // If all clusters reached their size limit, find the nearest cluster without size restriction
+        if (minDist == std::numeric_limits<double>::max())
+        {
+            for (int j = 0; j < k; ++j)
+            {
+                double dist = 0.0;
+                for (int d = 0; d < dim; ++d)
+                {
+                    double diff = metadata[i].coordinates[d] - centers[j][d];
+                    dist += diff * diff;
+                }
+
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    nearestCluster = j;
+                }
+            }
+        }
+
         clusters[i] = nearestCluster;
+        clusterSizes[nearestCluster]++;
+    }
+    // Print statistics about cluster sizes
+    if (rank == 0) {
+        auto minmax = std::minmax_element(clusterSizes.begin(), clusterSizes.end());
+        double avg = std::accumulate(clusterSizes.begin(), clusterSizes.end(), 0.0) / k;
+        
+        std::cout << "Cluster size statistics:" << std::endl;
+        std::cout << "  Smallest cluster: " << *minmax.first << std::endl; 
+        std::cout << "  Largest cluster: " << *minmax.second << std::endl;
+        std::cout << "  Average cluster size: " << avg << std::endl;
     }
 
     return clusters;
@@ -190,18 +236,19 @@ void finerPartition(const std::vector<PointMetadata> &metadata, int numBlocksPer
     finerPartitions.clear();
     finerPartitions.resize(numBlocksPerProcess);
 
-    int rank;
+    int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     // Perform clustering
     std::vector<int> clusters;
-    if (numBlocksPerProcess * 3 < metadata.size())
+    if (numBlocksPerProcess * 2 < metadata.size())
     {
         // block Vecchia
         if (opts.clustering == "random")
         {
             // Use random clustering for large datasets
-            clusters = randomClustering(metadata, numBlocksPerProcess, opts.dim, opts.seed + rank);
+            clusters = randomClustering(metadata, numBlocksPerProcess, opts.dim, opts.seed * size + rank);
         }
         else if (opts.clustering == "kmeans++")
         {
@@ -608,7 +655,7 @@ void partitionPointsDirectly(
     std::vector<int> centerIndices;
 
     // Initialize random number generator with seed + rank for reproducibility
-    std::mt19937 gen(opts.seed + rank);
+    std::mt19937 gen(opts.seed * size + rank);
 
     // Randomly select opts.numBlocksPerProcess points as centers
     std::vector<int> indices(localPoints.size());

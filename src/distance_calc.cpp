@@ -115,7 +115,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             // Calculate distance between block center and the current center
             double distance = calculateDistance(blockInfo.center, center);
             // If within threshold, send to the corresponding rank
-            if (distance < distance_threshold) {
+            if (distance < distance_threshold/opts.dim) {
                 if (blockIndexSets[destRank].find(globalOrder) == blockIndexSets[destRank].end()) {
                     sendBuffers[destRank].push_back(blockInfo);
                     blockIndexSets[destRank].insert(globalOrder);

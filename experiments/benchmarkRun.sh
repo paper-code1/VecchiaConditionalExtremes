@@ -3,14 +3,14 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
 #SBATCH --partition=batch
-#SBATCH -J benchmark_data_vbatched
-#SBATCH -o benchmark_data_vbatched.%J.out
-#SBATCH -e benchmark_data_vbatched.%J.err
+#SBATCH -J benchmark_data
+#SBATCH -o benchmark_data.%J.out
+#SBATCH -e benchmark_data.%J.err
 #SBATCH --time=20:00:00
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mem=200G # try larger memory
 
-# make clean && make -j
+# make -j
 
 N=1800000
 N_TEST=200000
@@ -20,11 +20,11 @@ NN_est=(100 200 400)
 NN_pred=(400 600)
 DIM=8
 kernel_type=Matern72
-maxeval=(500 1000 1000)
+maxeval=(1000 1000 1000)
 
 # export OMP_DISPLAY_AFFINITY=TRUE
 
-SPECIES=("O2" "N2" "H" "N" "O" "He") # 
+SPECIES=("N2" "H" "N" "O" "He") # "O2" 
 
 for species in ${SPECIES[@]}
 do
@@ -79,6 +79,18 @@ do
                             --nn_multiplier 500
                         fi
                         current_maxeval=1
+                            params_path="./log/theta_numPointsTotal1800000_numBlocksTotal${bc_est}_m${nn_est}_seed${fold}_isScaled1_.csv"
+
+                        # Read the first line of the CSV file
+                        line=$(head -n 1 $params_path)
+
+                        # Extract the first two values
+                        theta_init=$(echo "$line" | cut -d',' -f1-2)
+
+                        # Extract the rest of the values
+                        distance_scale_init=$(echo "$line" | cut -d',' -f3-)
+                        echo "theta_init: $theta_init"
+                        echo "distance_scale_init: $distance_scale_init"
                     done
                 done    
     params_path="./log/theta_numPointsTotal1800000_numBlocksTotal${bc_est}_m${nn_est}_seed${fold}_isScaled1_.csv"
@@ -102,6 +114,6 @@ do
             done
         done
     done
-    mkdir -p ./log/benchmark/$species
-    mv ./log/*.csv ./log/benchmark/$species
+    mkdir -p ./log/satellite/$species
+    mv ./log/*_.csv ./log/satellite/$species
 done
