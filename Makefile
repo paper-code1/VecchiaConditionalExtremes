@@ -22,7 +22,11 @@ endif
 NVCC=nvcc
 
 NVOPTS = -ccbin $(CXX) --compiler-options -uns --extended-lambda -allow-unsupported-compiler
-CXXFLAGS = -O2 -Wall -std=c++17 -lstdc++fs -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas -Wunused-variable
+CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas -Wunused-variable
+
+ifeq ($(SYSTEM),CRAY)
+  CXXFLAGS += -lstdc++fs
+endif
 
 ifdef _DEBUG_
   CXXFLAGS += -g -Xcompiler -rdynamic
@@ -54,11 +58,15 @@ INCLUDES+= -I${CUDA_ROOT}/include
 INCLUDES+= -I${NLOPT_ROOT}/include
 # INCLUDES+= -I${GSL_ROOT}/include // used for matern kernel, bessel function
 
-LIB_PATH=
-LIB_PATH+= -L${CUDA_ROOT}/targets/sbsa-linux/lib  #GH 200 system
-LIB_PATH+= -L${CUDA_ROOT}/lib64  # A100 system
-LIB_PATH+= -L${NLOPT_ROOT}/lib64 # GH200 system
-LIB_PATH+= -L${NLOPT_ROOT}/lib # A100 system
+ifeq ($(SYSTEM),CRAY)
+  LIB_PATH=
+  LIB_PATH+= -L${CUDA_ROOT}/targets/sbsa-linux/lib  #GH 200 system
+  LIB_PATH+= -L${NLOPT_ROOT}/lib64
+else
+  LIB_PATH=
+  LIB_PATH+= -L${CUDA_ROOT}/lib64  # A100 system
+  LIB_PATH+= -L${NLOPT_ROOT}/lib # A100 system
+endif
 # LIB_PATH+= -L${GSL_ROOT}/lib  // used for matern kernel, bessel function
 
 ifdef _USE_MAGMA_

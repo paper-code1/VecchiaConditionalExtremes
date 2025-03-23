@@ -19,7 +19,7 @@ M_ests=(100 200 400)
 # N_bs=(100)
 # M_ests=(100 200)
 
-# make -j
+make clean && make -j
 
 DIM=10
 theta_init=1.0,0.001
