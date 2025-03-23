@@ -13,14 +13,14 @@
 
 N_base_strong=(2000000) # larger problem BSV 100/400 A100
 
-make clean && make -j
+# make clean && make -j
 
 M_ests=(400)
 N_bs=(100)
 
 DIM=10
 theta_init=1.0,0.001
-distance_scale=0.05,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
+distance_scale=0.05,0.5,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
 # base scaling

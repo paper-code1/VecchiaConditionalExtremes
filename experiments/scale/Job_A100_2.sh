@@ -21,7 +21,7 @@ N_bs=(100)
 
 DIM=10
 theta_init=1.0,0.001
-distance_scale=0.05,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
+distance_scale=0.05,0.5,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
 # Calculate N_base_weak as N_base_strong[0] * (2^(0.6))

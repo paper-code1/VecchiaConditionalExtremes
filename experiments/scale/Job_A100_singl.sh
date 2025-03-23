@@ -6,7 +6,7 @@
 #SBATCH -J Single_A100
 #SBATCH -o Single_A100.%J.out
 #SBATCH -e Single_A100.%J.err
-#SBATCH --time=10:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:a100:1
 #SBATCH --constraint=a100
 #SBATCH --mem=100G # try larger memory
@@ -23,7 +23,7 @@ M_ests=(100 200 400)
 
 DIM=10
 theta_init=1.0,0.001
-distance_scale=0.05,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
+distance_scale=0.05,0.5,5.0,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
 for N in ${N_all[@]}; do
@@ -34,24 +34,26 @@ for N in ${N_all[@]}; do
                 bc=$((N/N_b))
                 m_bv=$M_est
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i"
-                srun --exclusive  ./bin/dbv \
-                    --num_total_points $N \
-                    --num_total_blocks $bc \
-                    --distance_scale $distance_scale \
-                    --distance_scale_init $distance_scale_init \
-                    --theta_init $theta_init \
-                    -m $m_bv \
-                    --dim $DIM \
-                    --mode estimation \
-                    --maxeval 500 \
-                    --xtol_rel 1e-8 \
-                    --ftol_rel 1e-8 \
-                    --kernel_type Matern72 \
-                    --seed $i \
-                    --nn_multiplier 500 \
-                    --log_append A100_single \
-                    --omp_num_threads 10 \
-                    --print=false
+                if [ \( $N -le 4000000 -a $m_bv -eq 400 \) -o \( $N -gt 8000000 -a $m_bv -eq 100 \) -o \( $N -gt 16000000 -a $m_bv -eq 100 \) ]; then
+                    srun --exclusive  ./bin/dbv \
+                        --num_total_points $N \
+                        --num_total_blocks $bc \
+                        --distance_scale $distance_scale \
+                        --distance_scale_init $distance_scale_init \
+                        --theta_init $theta_init \
+                        -m $m_bv \
+                        --dim $DIM \
+                        --mode estimation \
+                        --maxeval 500 \
+                        --xtol_rel 1e-8 \
+                        --ftol_rel 1e-8 \
+                        --kernel_type Matern72 \
+                        --seed $i \
+                        --nn_multiplier 500 \
+                        --log_append A100_single \
+                        --omp_num_threads 10 \
+                        --print=false
+                fi
             done
         done
     done
