@@ -19,7 +19,7 @@
 #include "prediction.h"
 #include "borehole.hpp"
 #include <nlopt.hpp>
-
+#include <nlopt.h>
 struct OptimizationData {
     GpuData* gpuData;
     Opts* opts;

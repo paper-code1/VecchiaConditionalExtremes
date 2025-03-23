@@ -7,11 +7,12 @@ _CUDA_ARCH_ ?= 70
 CUDA_ROOT=$(_CUDA_ROOT_)
 
 #----------------compliers -------------------------
-CXX = mpic++
-NVCC=$(_CUDA_ROOT_)/bin/nvcc
+CXX = CC # mpic++ #mpic++/cc
+#NVCC=$(_CUDA_ROOT_)/bin/nvcc
+NVCC=nvcc
 
 NVOPTS = -ccbin $(CXX) --compiler-options -uns --extended-lambda -allow-unsupported-compiler
-CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas -Wunused-variable
+CXXFLAGS = -O2 -Wall -std=c++17 -lstdc++fs -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas -Wunused-variable
 
 ifdef _DEBUG_
   CXXFLAGS += -g -Xcompiler -rdynamic
@@ -44,8 +45,8 @@ INCLUDES+= -I${NLOPT_ROOT}/include
 # INCLUDES+= -I${GSL_ROOT}/include // used for matern kernel, bessel function
 
 LIB_PATH=
-LIB_PATH+= -L${CUDA_ROOT}/lib64
-LIB_PATH+= -L${NLOPT_ROOT}/lib
+LIB_PATH+= -L${CUDA_ROOT}/targets/sbsa-linux/lib
+LIB_PATH+= -L${NLOPT_ROOT}/lib64
 # LIB_PATH+= -L${GSL_ROOT}/lib  // used for matern kernel, bessel function
 
 ifdef _USE_MAGMA_
@@ -58,9 +59,9 @@ LIB= -lm
 LIB+= -lnlopt  
 # LIB+= -lgsl // used for matern kernel, bessel function
 ifdef _USE_MAGMA_
-	LIB+= -lmagma -lcusparse
+	LIB+= -lmagma #-lcusparse
 endif
-LIB+= -lcublas -lcudart
+LIB+= -lcudart # -lcublas -lcudart
 LIB+= -lgomp
 LIB+= -lstdc++
 
