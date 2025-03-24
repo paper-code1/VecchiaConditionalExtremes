@@ -9,7 +9,7 @@
 #SBATCH --time=2:00:00
 #SBATCH --gres=gpu:a100:4
 #SBATCH --constraint=a100
-#SBATCH --mem=1000G # try larger memory
+#SBATCH --mem=500G # try larger memory
 
 N_base_strong=(4000000) # larger problem BSV 100/400 A100
 M_ests=(400)

@@ -1,25 +1,17 @@
 #!/bin/bash
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=72
 #SBATCH --partition=batch
-#SBATCH -J Single_A100
-#SBATCH -o Single_A100.%J.out
-#SBATCH -e Single_A100.%J.err
-#SBATCH --time=24:00:00
-#SBATCH --gres=gpu:a100:1
-#SBATCH --constraint=a100
-#SBATCH --mem=100G # try larger memory
+#SBATCH -J Single_GH200
+#SBATCH -o Single_GH200.%J.out
+#SBATCH -e Single_GH200.%J.err
+#SBATCH --time=23:59:00
+#SBATCH -A jureap137
 
-N_all=(10000 30000 70000 100000 300000 500000 700000 800000 1000000 2000000 3000000 4000000 5000000 6000000 7000000 8000000 9000000 10000000 12000000 16000000) #
+N_all=(10000 30000 70000 100000 300000 500000 700000 800000 1000000 2000000 3000000 4000000 5000000 6000000 7000000 8000000 9000000 10000000 12000000 16000000 18000000 20000000 22000000) #
 N_bs=(100)
 M_ests=(100 200 400)
-
-# N_all=(8000000 10000000 12000000 16000000) #
-# N_bs=(100)
-# M_ests=(100 200)
-
-# make -j
 
 DIM=10
 theta_init=1.0,0.001
@@ -34,7 +26,7 @@ for N in ${N_all[@]}; do
                 bc=$((N/N_b))
                 m_bv=$M_est
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i"
-                if [ \( $N -le 4000000 -a $m_bv -eq 400 \) -o \( $N -le 8000000 -a $m_bv -eq 200 \) -o \( $N -le 16000000 -a $m_bv -eq 100 \) ]; then
+                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 10000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
                     ./bin/dbv \
                         --num_total_points $N \
                         --num_total_blocks $bc \
@@ -51,7 +43,7 @@ for N in ${N_all[@]}; do
                         --seed $i \
                         --nn_multiplier 500 \
                         --log_append GH200_single \
-                        --omp_num_threads 10 \
+                        --omp_num_threads 72 \
                         --print=false
                 fi
             done
@@ -77,7 +69,7 @@ for N in ${N_all[@]}; do
                 --seed $i \
                 --nn_multiplier 500 \
                 --log_append GH200_single \
-                --omp_num_threads 10 \
+                --omp_num_threads 72 \
                 --print=false
         done
     fi

@@ -9,7 +9,7 @@
 #SBATCH --time=2:00:00
 #SBATCH --gres=gpu:a100:2
 #SBATCH --constraint=a100
-#SBATCH --mem=1000G # try larger memory
+#SBATCH --mem=200G # try larger memory
 
 # please note that weak scaling is measured constant computation time
 # bc : p^{1/5}  N: p^{3/5} --> ABS: p^{2/5}

@@ -66,6 +66,7 @@ else
   LIB_PATH=
   LIB_PATH+= -L${CUDA_ROOT}/lib64  # A100 system
   LIB_PATH+= -L${NLOPT_ROOT}/lib # A100 system
+  LIB_PATH+= -L${NLOPT_ROOT}/lib64 # GH200 slurm system
 endif
 # LIB_PATH+= -L${GSL_ROOT}/lib  // used for matern kernel, bessel function
 
