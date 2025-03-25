@@ -9,7 +9,7 @@
 #SBATCH --time=10:00:00
 #SBATCH -A jureap137
 
-N_all=(10000 30000 70000 100000 300000 500000 700000 800000)
+N_all=(10000 30000 70000 100000 300000 500000 700000)
 N_bs=(100)
 M_ests=(100 200 400)
 nn_multipliers=(100 200 500)
@@ -19,17 +19,17 @@ theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
-for index in {0..2}; do
+for index in {0..7}; do
     N=${N_all[$index]}
-    nn_multiplier=${nn_multipliers[$index]}
     # Scaled block Vecchia
-    for M_est in ${M_ests[@]}; do
+    for index_est in {0..2}; do
+        m_bv=${M_ests[$index_est]}
+        nn_multiplier=${nn_multipliers[$index_est]}
         for N_b in ${N_bs[@]}; do
             for i in {1..3}; do
                 bc=$((N/N_b))
-                m_bv=$M_est
-                echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i"
-                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 10000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
+                echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i, nn_multiplier: $nn_multiplier"
+                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
                     ./bin/dbv \
                         --num_total_points $N \
                         --num_total_blocks $bc \
@@ -54,7 +54,7 @@ for index in {0..2}; do
     done
 
     # Scaled Vecchia
-    if [ $N -le 800000 ]; then
+    if [ $N -le 700000 ]; then
         for i in {1..3}; do
            ./bin/dbv \
                 --num_total_points $N \
