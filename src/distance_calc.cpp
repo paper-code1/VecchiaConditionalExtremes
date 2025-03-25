@@ -88,8 +88,14 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     allCenterRanks.insert(allCenterRanks.end(), CenterRanks.begin(), CenterRanks.end());
     allCenterRanks.insert(allCenterRanks.end(), CenterRanks_test.begin(), CenterRanks_test.end());
 
-    // For each center in combined CenterRanks
+    // Using OpenMP with private copies of blockIndexSets and sendBuffers to avoid race conditions
+    std::vector<std::vector<std::set<int>>> private_blockIndexSets(omp_get_max_threads(), std::vector<std::set<int>>(size));
+    std::vector<std::vector<std::vector<BlockInfo>>> private_sendBuffers(omp_get_max_threads(), std::vector<std::vector<BlockInfo>>(size));
+
+    // Parallelize loop over centers with a chunking strategy
+    #pragma omp parallel for schedule(dynamic)
     for (int i=0; i<allCenterRanks.size(); ++i){
+        int thread_id = omp_get_thread_num();
         const auto &centerRank = allCenterRanks[i];
         const auto &center = centerRank.first;
         int destRank = centerRank.second;
@@ -104,9 +110,9 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             // Send first m_const blocks to all processors to ensure enough blocks
             if (globalOrder < m_const) {
                 for (int dest = 0; dest < size; ++dest) {
-                    if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end()) {
-                        sendBuffers[dest].push_back(blockInfo);
-                        blockIndexSets[dest].insert(globalOrder);
+                    if (private_blockIndexSets[thread_id][dest].find(globalOrder) == private_blockIndexSets[thread_id][dest].end()) {
+                        private_sendBuffers[thread_id][dest].push_back(blockInfo);
+                        private_blockIndexSets[thread_id][dest].insert(globalOrder);
                     }
                 }
                 continue;
@@ -116,9 +122,26 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             double distance = calculateDistance(blockInfo.center, center);
             // If within threshold, send to the corresponding rank
             if (distance < distance_threshold/opts.dim) {
-                if (blockIndexSets[destRank].find(globalOrder) == blockIndexSets[destRank].end()) {
-                    sendBuffers[destRank].push_back(blockInfo);
-                    blockIndexSets[destRank].insert(globalOrder);
+                if (private_blockIndexSets[thread_id][destRank].find(globalOrder) == private_blockIndexSets[thread_id][destRank].end()) {
+                    private_sendBuffers[thread_id][destRank].push_back(blockInfo);
+                    private_blockIndexSets[thread_id][destRank].insert(globalOrder);
+                }
+            }
+        }
+    }
+
+    // Merge private data structures
+    for (int t = 0; t < omp_get_max_threads(); t++) {
+        for (int dest = 0; dest < size; dest++) {
+            for (const auto& globalOrder : private_blockIndexSets[t][dest]) {
+                if (blockIndexSets[dest].find(globalOrder) == blockIndexSets[dest].end()) {
+                    for (const auto& block : private_sendBuffers[t][dest]) {
+                        if (block.globalOrder == globalOrder) {
+                            sendBuffers[dest].push_back(block);
+                            blockIndexSets[dest].insert(globalOrder);
+                            break;
+                        }
+                    }
                 }
             }
         }
