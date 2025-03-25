@@ -9,16 +9,19 @@
 #SBATCH --time=10:00:00
 #SBATCH -A jureap137
 
-N_all=(10000 30000 70000 100000 300000 500000 700000 800000 1000000 2000000 3000000 4000000 5000000 6000000 7000000 8000000 9000000 10000000 12000000 16000000 18000000 20000000 22000000) #
+N_all=(10000 30000 70000 100000 300000 500000 700000 800000)
 N_bs=(100)
 M_ests=(100 200 400)
+nn_multipliers=(100 200 500)
 
 DIM=10
 theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
-for N in ${N_all[@]}; do
+for index in {0..2}; do
+    N=${N_all[$index]}
+    nn_multiplier=${nn_multipliers[$index]}
     # Scaled block Vecchia
     for M_est in ${M_ests[@]}; do
         for N_b in ${N_bs[@]}; do
@@ -41,7 +44,7 @@ for N in ${N_all[@]}; do
                         --ftol_rel 1e-8 \
                         --kernel_type Matern72 \
                         --seed $i \
-                        --nn_multiplier 500 \
+                        --nn_multiplier $nn_multiplier \
                         --log_append GH200_single \
                         --omp_num_threads 72 \
                         --print=false
@@ -67,7 +70,7 @@ for N in ${N_all[@]}; do
                 --ftol_rel 1e-8 \
                 --kernel_type Matern72 \
                 --seed $i \
-                --nn_multiplier 500 \
+                --nn_multiplier 50 \
                 --log_append GH200_single \
                 --omp_num_threads 72 \
                 --print=false

@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=4
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=15
 #SBATCH --partition=batch
 #SBATCH -J scaling_a100_4
 #SBATCH -o scaling_a100_4.%J.out
 #SBATCH -e scaling_a100_4.%J.err
-#SBATCH --time=2:00:00
+#SBATCH --time=4:00:00
 #SBATCH --gres=gpu:a100:4
 #SBATCH --constraint=a100
 #SBATCH --mem=500G # try larger memory
