@@ -52,7 +52,7 @@ for N in ${N_base_weak[@]}; do
                     --seed $i \
                     --nn_multiplier 500 \
                     --log_append A100_scaling_16\
-                    --omp_num_threads 10 \
+                    --omp_num_threads 15 \
                     # --print=false
             done
         done
@@ -85,7 +85,7 @@ for N in ${N_base_strong[@]}; do
                     --seed $i \
                     --nn_multiplier 500 \
                     --log_append A100_scaling_16\
-                    --omp_num_threads 10 \
+                    --omp_num_threads 15 \
                     # --print=false
             done
         done

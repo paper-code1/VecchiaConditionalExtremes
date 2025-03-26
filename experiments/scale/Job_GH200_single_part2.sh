@@ -2,7 +2,6 @@
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=72
-#SBATCH --partition=batch
 #SBATCH -J Single_GH200
 #SBATCH -o Single_GH200.%J.out
 #SBATCH -e Single_GH200.%J.err
@@ -29,7 +28,8 @@ for index in {0..11}; do
             for i in {1..3}; do
                 bc=$((N/N_b))
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i, nn_multiplier: $nn_multiplier"
-                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
+                # if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
+                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 8000000 -a $m_bv -eq 200 \) -o \( $N -le 12000000 -a $m_bv -eq 100 \) ]; then # just show a trend, scability is shown in other experiments
                     ./bin/dbv \
                         --num_total_points $N \
                         --num_total_blocks $bc \

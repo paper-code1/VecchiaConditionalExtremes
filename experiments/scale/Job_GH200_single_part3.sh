@@ -2,7 +2,6 @@
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=72
-#SBATCH --partition=batch
 #SBATCH -J Single_GH200
 #SBATCH -o Single_GH200.%J.out
 #SBATCH -e Single_GH200.%J.err

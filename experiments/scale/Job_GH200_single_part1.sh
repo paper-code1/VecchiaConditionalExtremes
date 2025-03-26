@@ -2,7 +2,6 @@
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=72
-#SBATCH --partition=batch
 #SBATCH -J Single_GH200
 #SBATCH -o Single_GH200.%J.out
 #SBATCH -e Single_GH200.%J.err
@@ -54,7 +53,7 @@ for index in {0..7}; do
     done
 
     # Scaled Vecchia
-    if [ $N -le 700000 ]; then
+    if [ $N -le 500000 ]; then # more than 500k takes a lot of time, not worth it, just show a trend
         for i in {1..3}; do
            ./bin/dbv \
                 --num_total_points $N \

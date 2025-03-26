@@ -51,7 +51,7 @@ for index in {0..2}; do
 done
 
 for index in {0..2}; do
-    N_base_strong=$((N_base_strong[$index]/num_GPUs))
+    N_base_strong=$((N_base_strong[$index]))
     N_bs_strong=${N_bs[0]}
     N_bc_strong=$((N_base_strong/N_bs_strong))
     M_est_strong=${M_ests[$index]}
