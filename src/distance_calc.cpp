@@ -266,7 +266,7 @@ void nearest_neighbor_search(std::vector<BlockInfo> &blockInfos, std::vector<Blo
     double distance_threshold = opts.distance_threshold_finer;
     
     // Perform nearest neighbor search
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < blockInfos.size(); ++i) {
         auto& block = blockInfos[i];
         // tuple: distance, point, observation

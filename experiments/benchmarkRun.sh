@@ -10,11 +10,9 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mem=200G # try larger memory
 
-# make -j
-
 N=1800000
 N_TEST=200000
-BlockCount=(20000)
+BlockCount=(18000)
 BlockCount_TEST=(40000)
 NN_est=(100 200 400)
 NN_pred=(400 600)
@@ -24,7 +22,7 @@ maxeval=(1000 1000 1000)
 
 # export OMP_DISPLAY_AFFINITY=TRUE
 
-SPECIES=("N2" "H" "N" "O" "He") # "O2" 
+SPECIES=("N2" "H" "N" "O" "He" "O2") 
 
 for species in ${SPECIES[@]}
 do
