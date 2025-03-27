@@ -147,13 +147,13 @@ int main(int argc, char **argv)
     std::vector<PointMetadata> localPoints_test;
     if (opts.train_metadata_path != ""){
         localPoints = readPointsConcurrently(opts.train_metadata_path, opts.numPointsTotal, opts);
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts.numPointsTotal_test, opts);
         }
     }
     else{
         localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
         }
         // std::cout << "Sampling borehole function" << std::endl;
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 
     // do the distance scale for input points
     distanceScale(localPoints, opts.distance_scale, opts.dim);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         distanceScale(localPoints_test, opts.distance_scale, opts.dim);
     }
 
@@ -183,13 +183,13 @@ int main(int argc, char **argv)
 
     if (opts.partition == "linear"){
         partitionPoints(localPoints, localPoints_partition, opts);
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             partitionPoints(localPoints_test, localPoints_partition_test, opts);
         }
     }
     else if (opts.partition == "none"){
         localPoints_partition = localPoints;
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             localPoints_partition_test = localPoints_test;
         }
     }
@@ -205,7 +205,7 @@ int main(int argc, char **argv)
     std::vector<std::vector<PointMetadata>> finerPartitions;
     std::vector<std::vector<PointMetadata>> finerPartitions_test;
     finerPartition(localPoints_partition, opts.numBlocksPerProcess, finerPartitions, opts);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         finerPartition(localPoints_partition_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts);
     }
     // partitionPointsDirectly(localPoints_partition, finerPartitions, opts.numBlocksPerProcess, opts);
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
     auto start_centers_of_gravity = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<double>> centers = calculateCentersOfGravity(finerPartitions, opts);
     std::vector<std::vector<double>> centers_test;
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         centers_test = calculateCentersOfGravity(finerPartitions_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -245,7 +245,7 @@ int main(int argc, char **argv)
     std::vector<std::pair<std::vector<double>, int>> allCenters_test;
     // send the centers to the root processor and add the rank (label)
     sendCentersOfGravityToRoot(centers, allCenters, opts);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         sendCentersOfGravityToRoot(centers_test, allCenters_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -267,7 +267,7 @@ int main(int argc, char **argv)
     int numCenters_test = allCenters_test.size();
     MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
     broadcastCenters(allCenters, numCenters, opts);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         MPI_Bcast(&numCenters_test, 1, MPI_INT, 0, MPI_COMM_WORLD);
         broadcastCenters(allCenters_test, numCenters_test, opts);
     }
@@ -284,7 +284,7 @@ int main(int argc, char **argv)
     auto start_create_block_info = std::chrono::high_resolution_clock::now();
     std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, opts);
     std::vector<BlockInfo> localBlocks_test;
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         // testset does not need to consider order of blocks
         localBlocks_test = createBlockInfo_test(finerPartitions_test, centers_test, opts);
     }
@@ -320,8 +320,10 @@ int main(int argc, char **argv)
         std::cout << "Performing NN searching" << std::endl;
     }
     auto start_nn_searching = std::chrono::high_resolution_clock::now();
-    nearest_neighbor_search(localBlocks, receivedBlocks, opts, false);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "estimation" || opts.mode == "full"){
+        nearest_neighbor_search(localBlocks, receivedBlocks, opts, false);
+    }
+    if (opts.mode == "prediction" || opts.mode == "full"){
         nearest_neighbor_search(localBlocks_test, receivedBlocks, opts, true);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -334,152 +336,160 @@ int main(int argc, char **argv)
 
     // descale
     distanceDeScale(localBlocks, opts.distance_scale, opts.dim);
-    if (opts.mode == "prediction"){
+    if (opts.mode != "prediction" || opts.mode != "full"){
         distanceDeScale(localBlocks_test, opts.distance_scale, opts.dim);
     }
     // 5. independent computation of log-likelihood
-    auto start_gpu_copy = std::chrono::high_resolution_clock::now();
-    // Step 1: Copy data to GPU
-    GpuData gpuData = copyDataToGPU(opts, localBlocks);
-    MPI_Barrier(MPI_COMM_WORLD);
-    auto end_gpu_copy = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_gpu_copy = end_gpu_copy - start_gpu_copy;
     double max_duration_gpu_copy;
-    double duration_gpu_copy_seconds = duration_gpu_copy.count();
-    MPI_Allreduce(&duration_gpu_copy_seconds, &max_duration_gpu_copy, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-    // // calculate the tota flops
-    double total_gflops = gflopsTotal(gpuData, opts);
-
-    // Step 2: Perform computation with BOBYQA optimization
-    auto start_computation = std::chrono::high_resolution_clock::now();
-
-    // Set up the optimization problem
-    nlopt::opt optimizer(nlopt::LN_SBPLX, opts.theta_init.size());
-    
-    // Set bounds for theta_init (adjust these as needed)
-    // set smoothness and nugget in power exponential kernel
-    switch (opts.kernel_type) {
-        case KernelType::PowerExponential:
-            opts.lower_bounds[0] = 0.01; // sigma2
-            opts.upper_bounds[0] = 3.0;
-            opts.lower_bounds[1] = 0.01; // smoothness
-            opts.upper_bounds[1] = 2.0;
-            opts.lower_bounds[2] = 0.0; // nugget
-            opts.upper_bounds[2] = 0.1;
-            break;
-        case KernelType::Matern72:
-            opts.lower_bounds[0] = 0.01; // sigma2
-            opts.upper_bounds[0] = 2.0;
-            opts.lower_bounds[1] = 0.0; // nugget
-            opts.upper_bounds[1] = 0.1;
-            break;
-        case KernelType::Matern12:
-            opts.lower_bounds[0] = 0.01; // sigma2
-            opts.upper_bounds[0] = 3.0;
-            opts.lower_bounds[1] = 0.0; // nugget
-            opts.upper_bounds[1] = 0.1;
-            break;
-        case KernelType::Matern32:
-            opts.lower_bounds[0] = 0.01; // sigma2
-            opts.upper_bounds[0] = 3.0;
-            opts.lower_bounds[1] = 0.0; // nugget
-            opts.upper_bounds[1] = 0.1;
-            break;
-        case KernelType::Matern52:
-            opts.lower_bounds[0] = 0.01; // sigma2
-            opts.upper_bounds[0] = 3.0;
-            opts.lower_bounds[1] = 0.0; // nugget
-            opts.upper_bounds[1] = 0.1;
-            break;
-        default:
-            break;
-    }
-    optimizer.set_lower_bounds(opts.lower_bounds);
-    optimizer.set_upper_bounds(opts.upper_bounds);
-
-    // Set stopping criteria
-    optimizer.set_xtol_rel(opts.xtol_rel);
-    optimizer.set_ftol_rel(opts.ftol_rel);
-    optimizer.set_maxeval(opts.maxeval);
-
-    // Prepare the optimization data
-    OptimizationData opt_data = {&gpuData, &opts, rank, MPI_COMM_WORLD};
-
-    // Set the objective function
-    optimizer.set_min_objective(objective_function, &opt_data);
-
-    // print the config of optimizer
-    if (rank == 0 && opts.print){
-        std::cout << "Optimizer dimension: " << optimizer.get_dimension() << std::endl;
-        std::cout << "Optimizer lower bounds: ";
-        for (auto bound : opts.lower_bounds) {
-            std::cout << bound << ", ";
-        }
-        std::cout << std::endl;
-        std::cout << "Optimizer upper bounds: ";
-        for (auto bound : opts.upper_bounds) {
-            std::cout << bound << ", ";
-        }
-        std::cout << std::endl;
-        std::cout << "Optimizer xtol_rel: " << opts.xtol_rel << std::endl;
-        std::cout << "Optimizer ftol_rel: " << opts.ftol_rel << std::endl;
-        std::cout << "Optimizer maxeval: " << opts.maxeval << std::endl;
-    }
-
-    // Perform the optimization
-    std::vector<double> optimized_theta = opts.theta_init;  // Start with initial theta values
+    double max_duration_total;
+    double max_duration_cleanup_gpu;
+    double max_duration_computation;
+    double total_gflops=0.;
     double optimized_log_likelihood;
-    
-    try {
-        nlopt::result result = optimizer.optimize(optimized_theta, optimized_log_likelihood);
-        if (rank == 0 && opts.print) {
-            std::cout << "Optimization result tag: " << result << std::endl;
-            std::cout << "Optimized log-likelihood: " << -optimized_log_likelihood << std::endl;
-            std::cout << "Optimized theta values: ";
-            for (auto theta : optimized_theta) {
-            std::cout << theta << " ";
+    std::vector<double> optimized_theta;
+    if (opts.mode == "estimation" || opts.mode == "full"){
+        auto start_gpu_copy = std::chrono::high_resolution_clock::now();
+        // Step 1: Copy data to GPU
+        GpuData gpuData = copyDataToGPU(opts, localBlocks);
+        MPI_Barrier(MPI_COMM_WORLD);
+        auto end_gpu_copy = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration_gpu_copy = end_gpu_copy - start_gpu_copy;
+        double duration_gpu_copy_seconds = duration_gpu_copy.count();
+        MPI_Allreduce(&duration_gpu_copy_seconds, &max_duration_gpu_copy, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+        // // calculate the tota flops
+        total_gflops = gflopsTotal(gpuData, opts);
+
+        // Step 2: Perform computation with BOBYQA optimization
+        auto start_computation = std::chrono::high_resolution_clock::now();
+        nlopt::srand(42);
+        
+        // Set up the optimization problem
+        nlopt::opt optimizer(nlopt::LN_SBPLX, opts.theta_init.size());
+        
+        // Set bounds for theta_init (adjust these as needed)
+        // set smoothness and nugget in power exponential kernel
+        switch (opts.kernel_type) {
+            case KernelType::PowerExponential:
+                opts.lower_bounds[0] = 0.01; // sigma2
+                opts.upper_bounds[0] = 3.0;
+                opts.lower_bounds[1] = 0.01; // smoothness
+                opts.upper_bounds[1] = 2.0;
+                opts.lower_bounds[2] = 0.0; // nugget
+                opts.upper_bounds[2] = 0.1;
+                break;
+            case KernelType::Matern72:
+                opts.lower_bounds[0] = 0.01; // sigma2
+                opts.upper_bounds[0] = 2.0;
+                opts.lower_bounds[1] = 0.0; // nugget
+                opts.upper_bounds[1] = 0.1;
+                break;
+            case KernelType::Matern12:
+                opts.lower_bounds[0] = 0.01; // sigma2
+                opts.upper_bounds[0] = 3.0;
+                opts.lower_bounds[1] = 0.0; // nugget
+                opts.upper_bounds[1] = 0.1;
+                break;
+            case KernelType::Matern32:
+                opts.lower_bounds[0] = 0.01; // sigma2
+                opts.upper_bounds[0] = 3.0;
+                opts.lower_bounds[1] = 0.0; // nugget
+                opts.upper_bounds[1] = 0.1;
+                break;
+            case KernelType::Matern52:
+                opts.lower_bounds[0] = 0.01; // sigma2
+                opts.upper_bounds[0] = 3.0;
+                opts.lower_bounds[1] = 0.0; // nugget
+                opts.upper_bounds[1] = 0.1;
+                break;
+            default:
+                break;
+        }
+        optimizer.set_lower_bounds(opts.lower_bounds);
+        optimizer.set_upper_bounds(opts.upper_bounds);
+
+        // Set stopping criteria
+        optimizer.set_xtol_rel(opts.xtol_rel);
+        optimizer.set_ftol_rel(opts.ftol_rel);
+        optimizer.set_maxeval(opts.maxeval);
+
+        // Prepare the optimization data
+        OptimizationData opt_data = {&gpuData, &opts, rank, MPI_COMM_WORLD};
+
+        // Set the objective function
+        optimizer.set_min_objective(objective_function, &opt_data);
+
+        // print the config of optimizer
+        if (rank == 0 && opts.print){
+            std::cout << "Optimizer dimension: " << optimizer.get_dimension() << std::endl;
+            std::cout << "Optimizer lower bounds: ";
+            for (auto bound : opts.lower_bounds) {
+                std::cout << bound << ", ";
             }
             std::cout << std::endl;
+            std::cout << "Optimizer upper bounds: ";
+            for (auto bound : opts.upper_bounds) {
+                std::cout << bound << ", ";
+            }
+            std::cout << std::endl;
+            std::cout << "Optimizer xtol_rel: " << opts.xtol_rel << std::endl;
+            std::cout << "Optimizer ftol_rel: " << opts.ftol_rel << std::endl;
+            std::cout << "Optimizer maxeval: " << opts.maxeval << std::endl;
         }
-    } catch (std::exception &e) {
-        if (rank == 0 && opts.print) { 
-            std::cerr << "Optimization failed: " << e.what() << std::endl;
+
+        // Perform the optimization
+        optimized_theta = opts.theta_init;  // Start with initial theta values
+        
+        try {
+            nlopt::result result = optimizer.optimize(optimized_theta, optimized_log_likelihood);
+            if (rank == 0 && opts.print) {
+                std::cout << "Optimization result tag: " << result << std::endl;
+                std::cout << "Optimized log-likelihood: " << -optimized_log_likelihood << std::endl;
+                std::cout << "Optimized theta values: ";
+                for (auto theta : optimized_theta) {
+                std::cout << theta << " ";
+                }
+                std::cout << std::endl;
+            }
+        } catch (std::exception &e) {
+            if (rank == 0 && opts.print) { 
+                std::cerr << "Optimization failed: " << e.what() << std::endl;
+            }
         }
+
+        // Broadcast the final optimized theta to all processes
+        MPI_Bcast(optimized_theta.data(), optimized_theta.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        auto end_computation = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration_computation = end_computation - start_computation;
+        
+        double duration_computation_seconds = duration_computation.count();
+        MPI_Allreduce(&duration_computation_seconds, &max_duration_computation, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        if (rank == 0 && opts.print){
+            std::cout << "-------------------Estimation Done-----------------" << std::endl;
+        }
+    
+        // Step 3: Cleanup GPU memory
+        auto start_cleanup_gpu = std::chrono::high_resolution_clock::now();
+        cleanupGpuMemory(gpuData);
+        MPI_Barrier(MPI_COMM_WORLD);
+        auto end_cleanup_gpu = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration_cleanup_gpu = end_cleanup_gpu - start_cleanup_gpu;
+        
+        double duration_cleanup_gpu_seconds = duration_cleanup_gpu.count();
+        MPI_Allreduce(&duration_cleanup_gpu_seconds, &max_duration_cleanup_gpu, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+        
+        auto end_total = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration_total = end_total - start_total;
+        double duration_total_seconds = duration_total.count();
+        MPI_Allreduce(&duration_total_seconds, &max_duration_total, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
-    // Broadcast the final optimized theta to all processes
-    MPI_Bcast(optimized_theta.data(), optimized_theta.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    auto end_computation = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_computation = end_computation - start_computation;
-    double max_duration_computation;
-    double duration_computation_seconds = duration_computation.count();
-    MPI_Allreduce(&duration_computation_seconds, &max_duration_computation, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    if (rank == 0 && opts.print){
-        std::cout << "-------------------Estimation Done-----------------" << std::endl;
-    }
-    // Step 3: Cleanup GPU memory
-    auto start_cleanup_gpu = std::chrono::high_resolution_clock::now();
-    cleanupGpuMemory(gpuData);
-    MPI_Barrier(MPI_COMM_WORLD);
-    auto end_cleanup_gpu = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_cleanup_gpu = end_cleanup_gpu - start_cleanup_gpu;
-    double max_duration_cleanup_gpu;
-    double duration_cleanup_gpu_seconds = duration_cleanup_gpu.count();
-    MPI_Allreduce(&duration_cleanup_gpu_seconds, &max_duration_cleanup_gpu, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
-    
-    auto end_total = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_total = end_total - start_total;
-    double duration_total_seconds = duration_total.count();
-    double max_duration_total;
-    MPI_Allreduce(&duration_total_seconds, &max_duration_total, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
-    
     // do the prediction for the test points
     GpuData gpuData_test;
     double mspe = -1.0;
@@ -493,15 +503,24 @@ int main(int argc, char **argv)
     //     new_range_scaled[i] = pre_range_factor[i] * post_range_factor[i];
     //     new_theta[i+opts.range_offset] = new_range_scaled[i];
     // }
-    if (opts.mode == "prediction") {
+    if (opts.mode == "full") {
         gpuData_test = copyDataToGPU(opts, localBlocks_test);
         std::tie(mspe, rmspe, ci_coverage) = performPredictionOnGPU(gpuData_test, optimized_theta, opts);
         cleanupGpuMemory(gpuData_test);
+    }else if (opts.mode == "prediction"){
+        optimized_theta = opts.theta_init;
+        gpuData_test = copyDataToGPU(opts, localBlocks_test);
+        std::tie(mspe, rmspe, ci_coverage) = performPredictionOnGPU(gpuData_test, optimized_theta, opts);
+        cleanupGpuMemory(gpuData_test);
+    }else{
+        mspe = -1.0;
+        rmspe = -1.0;
+        ci_coverage = -1.0;
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     
     // save the time and gflops to a file
-    MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
         saveTimeAndGflops(
             max_RAC_partitioning, max_duration_centers_of_gravity, 
