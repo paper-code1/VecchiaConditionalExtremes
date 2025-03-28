@@ -5,7 +5,7 @@
 #SBATCH -J scaling_GH200_1
 #SBATCH -o scaling_GH200_1.%J.out
 #SBATCH -e scaling_GH200_1.%J.err
-#SBATCH --time=8:30:00
+#SBATCH --time=0:30:00
 #SBATCH -A jureap137
 
 N_base_strong=(5000000 5000000 5000000) # larger problem BSV 100/400 GH200
@@ -19,14 +19,14 @@ distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
 # base scaling
-for index in {0..2}; do
+for index in {0..1}; do
     # Scaled block Vecchia
     N=${N_base_strong[$index]}
     m_bv=${M_ests[$index]}
     nn_multiplier=${nn_multipliers[$index]}
-    for N_b in ${N_bs[@]}; do
-        for i in {1..1}; do
-            bc=$((N/N_b))
+    N_b=${N_bs[$index]}
+    for i in {1..1}; do
+        bc=$((N/N_b))
             echo "N: $N, bc: $bc, m_bv: $m_bv"
             srun --exclusive ./bin/dbv \
                 --num_total_points $N \

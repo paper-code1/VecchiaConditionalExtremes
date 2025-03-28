@@ -6,9 +6,9 @@
 #SBATCH -J benchmark_data
 #SBATCH -o benchmark_data.%J.out
 #SBATCH -e benchmark_data.%J.err
-#SBATCH --time=20:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:a100:1
-#SBATCH --mem=200G # try larger memory
+#SBATCH --mem=300G # try larger memory
 
 N=1800000
 N_TEST=200000
@@ -20,6 +20,7 @@ DIM=8
 kernel_type=Matern72
 maxeval=(1000 1000 1000)
 
+make clean && make -j
 # export OMP_DISPLAY_AFFINITY=TRUE
 
 SPECIES=("N2" "H" "N" "O" "He" "O2") 
@@ -68,7 +69,7 @@ do
                             --xtol_rel 1e-3 \
                             --ftol_rel 1e-5 \
                             --dim "$DIM" \
-                            --mode prediction \
+                            --mode full \
                             --maxeval "$current_maxeval" \
                             --train_metadata_path "$train_metadata_path" \
                             --test_metadata_path "$test_metadata_path" \
