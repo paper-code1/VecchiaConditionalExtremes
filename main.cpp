@@ -299,7 +299,15 @@ int main(int argc, char **argv)
     // 4.2 Block candidate preparation
     // Here, you could set the first 100 need to obtain all previous blocks and set threshold
     auto start_block_sending = std::chrono::high_resolution_clock::now();
-    std::vector<BlockInfo> receivedBlocks = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, opts);
+    std::vector<BlockInfo> receivedBlocks;
+    std::vector<BlockInfo> receivedBlocks_test;
+    if (opts.mode == "estimation" || opts.mode == "full"){
+        receivedBlocks = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, opts, false);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (opts.mode == "prediction" || opts.mode == "full"){
+        receivedBlocks_test = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, opts, true);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_block_sending = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_block_sending = end_block_sending - start_block_sending;
@@ -309,11 +317,21 @@ int main(int argc, char **argv)
     MPI_Barrier(MPI_COMM_WORLD);
 
     // print total point size of receivedBlocks and receivedBlocks size
-    int total_point_size = 0;
-    for (auto block : receivedBlocks){
-        total_point_size += block.blocks.size();
+    if (opts.mode == "estimation" || opts.mode == "full"){
+        int total_point_size = 0;
+        for (auto block : receivedBlocks){
+            total_point_size += block.blocks.size();
+        }
+        std::cout << "rank: " << rank << ", total_point_size: " << total_point_size << std::endl;
     }
-    std::cout << "rank: " << rank << ", total_point_size: " << total_point_size << std::endl;
+    if (opts.mode == "prediction" || opts.mode == "full"){
+        int total_point_size_test = 0;
+        for (auto block : receivedBlocks_test){
+            total_point_size_test += block.blocks.size();
+        }
+        std::cout << "rank: " << rank << ", total_point_size_test: " << total_point_size_test << std::endl;
+    }
+
     MPI_Barrier(MPI_COMM_WORLD);
     // 4.3 NN searching
     if (rank == 0){
@@ -324,7 +342,7 @@ int main(int argc, char **argv)
         nearest_neighbor_search(localBlocks, receivedBlocks, opts, false);
     }
     if (opts.mode == "prediction" || opts.mode == "full"){
-        nearest_neighbor_search(localBlocks_test, receivedBlocks, opts, true);
+        nearest_neighbor_search(localBlocks_test, receivedBlocks_test, opts, true);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_nn_searching = std::chrono::high_resolution_clock::now();

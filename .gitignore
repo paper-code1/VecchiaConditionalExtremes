@@ -4,6 +4,7 @@ trash/
 bin/
 obj/
 HST/
+HST_source/
 log/
 
 experiments/fig/

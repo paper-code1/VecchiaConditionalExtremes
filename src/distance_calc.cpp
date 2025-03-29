@@ -69,7 +69,7 @@ std::vector<BlockInfo> unpackBlockInfo(const std::vector<double> &buffer, const 
     return blocks;
 }
 
-std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks_test, double distance_threshold, const Opts& opts)
+std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks_test, double distance_threshold, const Opts& opts, bool pred_tag)
 {
     // returned: receivedBlocks, which is within the MC-NN based range
     int rank, size;
@@ -79,14 +79,17 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     // Prepare buffers to send blocks to other processors
     std::vector<std::set<int>> blockIndexSets(size);
     std::vector<std::vector<BlockInfo>> sendBuffers(size);
+    double distance_threshold_dynamic = (pred_tag) ? distance_threshold : distance_threshold/opts.dim;
 
     // 42 is a magic number, I like it
     int m_const = (opts.numBlocksTotal == opts.numPointsTotal) ? 300 : 42;
-
-    // Combine CenterRanks and CenterRanks_test
     std::vector<std::pair<std::vector<double>, int>> allCenterRanks;
-    allCenterRanks.insert(allCenterRanks.end(), CenterRanks.begin(), CenterRanks.end());
-    allCenterRanks.insert(allCenterRanks.end(), CenterRanks_test.begin(), CenterRanks_test.end());
+    // Combine CenterRanks and CenterRanks_test
+    if (pred_tag){
+        allCenterRanks = CenterRanks_test;
+    } else {
+        allCenterRanks = CenterRanks;
+    }
 
     // Using OpenMP with private copies of blockIndexSets and sendBuffers to avoid race conditions
     std::vector<std::vector<std::set<int>>> private_blockIndexSets(omp_get_max_threads(), std::vector<std::set<int>>(size));
@@ -121,7 +124,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             // Calculate distance between block center and the current center
             double distance = calculateDistance(blockInfo.center, center);
             // If within threshold, send to the corresponding rank
-            if (distance < distance_threshold/opts.dim) {
+            if (distance < distance_threshold_dynamic) {
                 if (private_blockIndexSets[thread_id][destRank].find(globalOrder) == private_blockIndexSets[thread_id][destRank].end()) {
                     private_sendBuffers[thread_id][destRank].push_back(blockInfo);
                     private_blockIndexSets[thread_id][destRank].insert(globalOrder);
