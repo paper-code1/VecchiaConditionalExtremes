@@ -24,9 +24,9 @@ nodistance_scale_init=$distance_scale
 for B_TEST in ${bc_test[@]}; do
     for M_TEST in ${m_bv_test[@]}; do
         # scale the distance
-        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode prediction --maxeval 1 --theta_init $theta_init --distance_scale $distance_scale --distance_scale_init $distance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
+        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode full --maxeval 1 --theta_init $theta_init --distance_scale $distance_scale --distance_scale_init $distance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
         # not scale the distance
-        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode prediction --maxeval 1 --theta_init $theta_init --distance_scale $nodistance_scale --distance_scale_init $nodistance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
+        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode full --maxeval 1 --theta_init $theta_init --distance_scale $nodistance_scale --distance_scale_init $nodistance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
     done
 done
 
@@ -49,9 +49,9 @@ nodistance_scale_init=$distance_scale
 for B_TEST in ${bc_test[@]}; do
     for M_TEST in ${m_bv_test[@]}; do
         # scaled distance
-        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode prediction --maxeval 1 --theta_init $theta_init --distance_scale $distance_scale --distance_scale_init $distance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
+        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode full --maxeval 1 --theta_init $theta_init --distance_scale $distance_scale --distance_scale_init $distance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
         # no scaled distance
-        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode prediction --maxeval 1 --theta_init $theta_init --distance_scale $nodistance_scale --distance_scale_init $nodistance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
+        ./bin/dbv --num_total_points $N --num_total_points_test $N_TEST --num_total_blocks $bc --num_total_blocks_test $B_TEST -m $m_bv --m_test $M_TEST --dim $DIM --mode full --maxeval 1 --theta_init $theta_init --distance_scale $nodistance_scale --distance_scale_init $nodistance_scale_init --train_metadata_path $train_metadata_path --test_metadata_path $test_metadata_path --nn_multiplier 99999 --log_append mspe-matern72-simu --kernel_type Matern72
     done
 done
 
