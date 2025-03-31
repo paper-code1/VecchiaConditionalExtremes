@@ -284,7 +284,7 @@ int main(int argc, char **argv)
     auto start_create_block_info = std::chrono::high_resolution_clock::now();
     std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, opts);
     std::vector<BlockInfo> localBlocks_test;
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         // testset does not need to consider order of blocks
         localBlocks_test = createBlockInfo_test(finerPartitions_test, centers_test, opts);
     }
@@ -513,7 +513,7 @@ int main(int argc, char **argv)
     //     new_range_scaled[i] = pre_range_factor[i] * post_range_factor[i];
     //     new_theta[i+opts.range_offset] = new_range_scaled[i];
     // }
-    if (opts.mode == "prediction") {
+    if (opts.mode == "prediction" || opts.mode == "full"){
         gpuData_test = copyDataToGPU(opts, localBlocks_test);
         std::tie(mspe, rmspe, ci_coverage) = performPredictionOnGPU(gpuData_test, optimized_theta, opts);
         cleanupGpuMemory(gpuData_test);
