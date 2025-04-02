@@ -28,7 +28,8 @@ for index in {0..1}; do
     nn_multiplier_weak=${nn_multipliers[$index]}
     # print N_base_weak, N_bs_weak, N_bc_weak, M_est_weak
     echo "N_base_weak: $N_base_weak, N_bs_weak: $N_bs_weak, N_bc_weak: $N_bc_weak, M_est_weak: $M_est_weak, nn_multiplier_weak: $nn_multiplier_weak"
-    for i in {1..$num_runs}; do
+    for i in $(seq 1 $num_runs); do
+        echo "Running $i"
         srun --exclusive  ./bin/dbv \
             --num_total_points $N_base_weak \
             --num_total_blocks $N_bc_weak \

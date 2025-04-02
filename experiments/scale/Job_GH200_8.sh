@@ -5,7 +5,7 @@
 #SBATCH -J scaling_GH200_8
 #SBATCH -o scaling_GH200_8.%J.out
 #SBATCH -e scaling_GH200_8.%J.err
-#SBATCH --time=0:30:00
+#SBATCH --time=1:00:00
 #SBATCH -A jureap137
 
 N_base_strong=(5000000 5000000 5000000) # larger problem BSV 100/400 GH200
@@ -28,7 +28,8 @@ for index in {0..1}; do
     nn_multiplier_weak=${nn_multipliers[$index]}
     # print N_base_weak, N_bs_weak, N_bc_weak, M_est_weak
     echo "N_base_weak: $N_base_weak, N_bs_weak: $N_bs_weak, N_bc_weak: $N_bc_weak, M_est_weak: $M_est_weak, nn_multiplier_weak: $nn_multiplier_weak"
-    for i in {1..$num_runs}; do
+    for i in $(seq 1 $num_runs); do
+        echo "Running $i"
         srun --exclusive  ./bin/dbv \
             --num_total_points $N_base_weak \
             --num_total_blocks $N_bc_weak \
