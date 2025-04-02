@@ -131,7 +131,7 @@ void partitionPoints(const std::vector<PointMetadata> &localMetadata, std::vecto
 }
 
 // Function to perform random clustering
-std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, int k, int dim, int seed)
+std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, int k, int dim, int seed, bool is_test)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -139,7 +139,7 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
     int numPoints = metadata.size();
     std::vector<int> clusters(numPoints);
     int block_size = numPoints / k;
-    float alpha_expansion = 1.5;
+    float alpha_expansion = is_test ? 99999999. : 1.5;
     
     // Initialize random number generator
     std::mt19937 gen(seed);
@@ -232,7 +232,7 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
 
 // Function to perform finer partitioning within each processor using k-means++
 void finerPartition(const std::vector<PointMetadata> &metadata, int numBlocksPerProcess,
-                    std::vector<std::vector<PointMetadata>> &finerPartitions, const Opts &opts)
+                    std::vector<std::vector<PointMetadata>> &finerPartitions, const Opts &opts, bool is_test)
 {
     finerPartitions.clear();
     finerPartitions.resize(numBlocksPerProcess);
@@ -249,12 +249,12 @@ void finerPartition(const std::vector<PointMetadata> &metadata, int numBlocksPer
         if (opts.clustering == "random")
         {
             // Use random clustering for large datasets
-            clusters = randomClustering(metadata, numBlocksPerProcess, opts.dim, opts.seed * size + rank);
+            clusters = randomClustering(metadata, numBlocksPerProcess, opts.dim, opts.seed * size + rank, is_test);
         }
         else if (opts.clustering == "kmeans++")
         {
             // Use k-means++ for smaller datasets
-            clusters = kMeansPlusPlus(metadata, numBlocksPerProcess, opts.dim, opts.kmeans_max_iter, rank, opts.seed);
+            clusters = kMeansPlusPlus(metadata, numBlocksPerProcess, opts.dim, opts.kmeans_max_iter, rank, opts.seed * size + rank);
         }
         else
         {

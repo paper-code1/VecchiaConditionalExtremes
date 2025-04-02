@@ -13,7 +13,7 @@ std::vector<PointMetadata> generateRandomPoints(int numPointsPerProcess, const O
 void partitionPoints(const std::vector<PointMetadata>& localPoints, std::vector<PointMetadata>& localPoints_out_partitioned, const Opts& opts);
 
 // Function to perform finer partitioning within each processor
-void finerPartition(const std::vector<PointMetadata>& points, int numBlocksPerProcess, std::vector<std::vector<PointMetadata>>& finerPartitions, const Opts& opts);
+void finerPartition(const std::vector<PointMetadata>& points, int numBlocksPerProcess, std::vector<std::vector<PointMetadata>>& finerPartitions, const Opts& opts, bool is_test);
 
 // Function to calculate centers of gravity for each block
 std::vector<std::vector<double>> calculateCentersOfGravity(const std::vector<std::vector<PointMetadata>> &finerPartitions, const Opts& opts);
@@ -34,7 +34,7 @@ std::vector<int> kMeansPlusPlus(const std::vector<PointMetadata>& metadata, int 
 std::vector<PointMetadata> readPointsConcurrently(const std::string& filename, int numBlocks, const Opts& opts);
 
 // Function to perform random clustering
-std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, int k, int dim, int seed);
+std::vector<int> randomClustering(const std::vector<PointMetadata>& metadata, int k, int dim, int seed, bool is_test);
 
 // Function to partition points directly
 void partitionPointsDirectly(

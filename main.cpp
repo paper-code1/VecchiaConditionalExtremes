@@ -147,13 +147,13 @@ int main(int argc, char **argv)
     std::vector<PointMetadata> localPoints_test;
     if (opts.train_metadata_path != ""){
         localPoints = readPointsConcurrently(opts.train_metadata_path, opts.numPointsTotal, opts);
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             localPoints_test = readPointsConcurrently(opts.test_metadata_path, opts.numPointsTotal_test, opts);
         }
     }
     else{
         localPoints = generateRandomPoints(opts.numPointsPerProcess, opts);
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
         }
         // std::cout << "Sampling borehole function" << std::endl;
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 
     // do the distance scale for input points
     distanceScale(localPoints, opts.distance_scale, opts.dim);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         distanceScale(localPoints_test, opts.distance_scale, opts.dim);
     }
 
@@ -183,13 +183,13 @@ int main(int argc, char **argv)
 
     if (opts.partition == "linear"){
         partitionPoints(localPoints, localPoints_partition, opts);
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             partitionPoints(localPoints_test, localPoints_partition_test, opts);
         }
     }
     else if (opts.partition == "none"){
         localPoints_partition = localPoints;
-        if (opts.mode == "prediction"){
+        if (opts.mode == "prediction" || opts.mode == "full"){
             localPoints_partition_test = localPoints_test;
         }
     }
@@ -204,9 +204,9 @@ int main(int argc, char **argv)
     auto start_preprocessing = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<PointMetadata>> finerPartitions;
     std::vector<std::vector<PointMetadata>> finerPartitions_test;
-    finerPartition(localPoints_partition, opts.numBlocksPerProcess, finerPartitions, opts);
-    if (opts.mode == "prediction"){
-        finerPartition(localPoints_partition_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts);
+    finerPartition(localPoints_partition, opts.numBlocksPerProcess, finerPartitions, opts, false);
+    if (opts.mode == "prediction" || opts.mode == "full"){
+        finerPartition(localPoints_partition_test, opts.numBlocksPerProcess_test, finerPartitions_test, opts, true);
     }
     // partitionPointsDirectly(localPoints_partition, finerPartitions, opts.numBlocksPerProcess, opts);
     // if (opts.mode == "prediction"){
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
     auto start_centers_of_gravity = std::chrono::high_resolution_clock::now();
     std::vector<std::vector<double>> centers = calculateCentersOfGravity(finerPartitions, opts);
     std::vector<std::vector<double>> centers_test;
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         centers_test = calculateCentersOfGravity(finerPartitions_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -245,7 +245,7 @@ int main(int argc, char **argv)
     std::vector<std::pair<std::vector<double>, int>> allCenters_test;
     // send the centers to the root processor and add the rank (label)
     sendCentersOfGravityToRoot(centers, allCenters, opts);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         sendCentersOfGravityToRoot(centers_test, allCenters_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -267,7 +267,7 @@ int main(int argc, char **argv)
     int numCenters_test = allCenters_test.size();
     MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
     broadcastCenters(allCenters, numCenters, opts);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         MPI_Bcast(&numCenters_test, 1, MPI_INT, 0, MPI_COMM_WORLD);
         broadcastCenters(allCenters_test, numCenters_test, opts);
     }
@@ -354,7 +354,7 @@ int main(int argc, char **argv)
 
     // descale
     distanceDeScale(localBlocks, opts.distance_scale, opts.dim);
-    if (opts.mode == "prediction"){
+    if (opts.mode == "prediction" || opts.mode == "full"){
         distanceDeScale(localBlocks_test, opts.distance_scale, opts.dim);
     }
     // 5. independent computation of log-likelihood

@@ -13,6 +13,7 @@ M_ests=(100 200 400)
 nn_multipliers=(300 300 500)
 N_bs=(100 100 100)
 num_GPUs=16
+num_runs=1
 DIM=10
 theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
@@ -27,7 +28,7 @@ for index in {0..1}; do
     nn_multiplier_weak=${nn_multipliers[$index]}
     # print N_base_weak, N_bs_weak, N_bc_weak, M_est_weak
     echo "N_base_weak: $N_base_weak, N_bs_weak: $N_bs_weak, N_bc_weak: $N_bc_weak, M_est_weak: $M_est_weak, nn_multiplier_weak: $nn_multiplier_weak"
-    for i in {1..1}; do
+    for i in {1..$num_runs}; do
         srun --exclusive  ./bin/dbv \
             --num_total_points $N_base_weak \
             --num_total_blocks $N_bc_weak \
@@ -57,7 +58,7 @@ for index in {0..1}; do
     nn_multiplier_strong=${nn_multipliers[$index]}
     # print N_base_strong, N_bs_strong, N_bc_strong, M_est_strong
     echo "N_base_strong: $N_base_strong, N_bs_strong: $N_bs_strong, N_bc_strong: $N_bc_strong, M_est_strong: $M_est_strong, nn_multiplier_strong: $nn_multiplier_strong"
-    for i in {1..1}; do
+    for i in {1..$num_runs}; do
         srun --exclusive  ./bin/dbv \
             --num_total_points $N_base_strong \
             --num_total_blocks $N_bc_strong \
