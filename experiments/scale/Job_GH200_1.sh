@@ -25,7 +25,8 @@ for index in {0..1}; do
     m_bv=${M_ests[$index]}
     nn_multiplier=${nn_multipliers[$index]}
     N_b=${N_bs[$index]}
-    for i in {1..$num_runs}; do
+    for i in $(seq 1 $num_runs); do
+        echo "Running $i"
         bc=$((N/N_b))
             echo "N: $N, bc: $bc, m_bv: $m_bv"
             srun --exclusive ./bin/dbv \

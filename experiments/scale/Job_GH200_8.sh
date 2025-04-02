@@ -58,7 +58,8 @@ for index in {0..1}; do
     nn_multiplier_strong=${nn_multipliers[$index]}
     # print N_base_strong, N_bs_strong, N_bc_strong, M_est_strong
     echo "N_base_strong: $N_base_strong, N_bs_strong: $N_bs_strong, N_bc_strong: $N_bc_strong, M_est_strong: $M_est_strong, nn_multiplier_strong: $nn_multiplier_strong"
-    for i in {1..$num_runs}; do
+    for i in $(seq 1 $num_runs); do
+        echo "Running $i"
         srun --exclusive  ./bin/dbv \
             --num_total_points $N_base_strong \
             --num_total_blocks $N_bc_strong \
