@@ -23,69 +23,69 @@ maxeval=(1000 1000 1000)
 # make clean && make -j
 # export OMP_DISPLAY_AFFINITY=TRUE
 
-# SPECIES=("N2" "N" "O" "He" "O2" "H") 
+SPECIES=("N2" "N" "O" "He" "O2" "H") 
 
-SPECIES=("N2") 
+# SPECIES=("N2") 
 
-# # estimation
-# for species in ${SPECIES[@]}
-# do
-#     for fold in {1..10}
-#     do
-#         train_metadata_path="./HST/${species}/hst${species}_fold${fold}_train.csv"
-#         test_metadata_path="./HST/${species}/hst${species}_fold${fold}_val.csv"
-#         theta_init="1,0"
-#         distance_scale_init="0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2"
-#         distance_scale="0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2"
+# estimation
+for species in ${SPECIES[@]}
+do
+    for fold in {1..10}
+    do
+        train_metadata_path="./HST/${species}/hst${species}_fold${fold}_train.csv"
+        test_metadata_path="./HST/${species}/hst${species}_fold${fold}_val.csv"
+        theta_init="1,0"
+        distance_scale_init="0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2"
+        distance_scale="0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2"
         
-#         for bc_est in ${BlockCount[@]}
-#         do
-#             for nn_est in ${NN_est[@]}
-#             do
-#                 echo "nn_est: $nn_est"
+        for bc_est in ${BlockCount[@]}
+        do
+            for nn_est in ${NN_est[@]}
+            do
+                echo "nn_est: $nn_est"
                         
-#                 # run
-#                 srun --cpus-per-task=40 ./bin/dbv --num_total_points "$N" \
-#                 --num_total_blocks "$bc_est" \
-#                 -m "$nn_est" \
-#                 --omp_num_threads 40 \
-#                 --theta_init "$theta_init" \
-#                 --distance_scale "$distance_scale" \
-#                 --distance_scale_init "$distance_scale_init" \
-#                 --xtol_rel 1e-3 \
-#                 --ftol_rel 1e-5 \
-#                 --dim "$DIM" \
-#                 --mode estimation \
-#                 --maxeval 1000 \
-#                 --train_metadata_path "$train_metadata_path" \
-#                 --kernel_type "$kernel_type"\
-#                 --seed "$fold"\
-#                 --nn_multiplier 1000 \
-#                 --log_append "$species"
+                # run
+                srun --cpus-per-task=40 ./bin/dbv --num_total_points "$N" \
+                --num_total_blocks "$bc_est" \
+                -m "$nn_est" \
+                --omp_num_threads 40 \
+                --theta_init "$theta_init" \
+                --distance_scale "$distance_scale" \
+                --distance_scale_init "$distance_scale_init" \
+                --xtol_rel 1e-3 \
+                --ftol_rel 1e-5 \
+                --dim "$DIM" \
+                --mode estimation \
+                --maxeval 1000 \
+                --train_metadata_path "$train_metadata_path" \
+                --kernel_type "$kernel_type"\
+                --seed "$fold"\
+                --nn_multiplier 1000 \
+                --log_append "$species"
 
-#                 # read params for next run
-#                 params_path="./log/theta_numPointsTotal1800000_numBlocksTotal${bc_est}_m${nn_est}_seed${fold}_isScaled1_${species}.csv"
+                # read params for next run
+                params_path="./log/theta_numPointsTotal1800000_numBlocksTotal${bc_est}_m${nn_est}_seed${fold}_isScaled1_${species}.csv"
 
-#                 # Read the first line of the CSV file
-#                 line=$(head -n 1 $params_path)
+                # Read the first line of the CSV file
+                line=$(head -n 1 $params_path)
 
-#                 # Extract the first two values
-#                 theta_init=$(echo "$line" | cut -d',' -f1-2)
+                # Extract the first two values
+                theta_init=$(echo "$line" | cut -d',' -f1-2)
 
-#                 # Extract the rest of the values
-#                 distance_scale=$(echo "$line" | cut -d',' -f3-)
-#                 distance_scale_init=$distance_scale
-#                 echo "theta_init: $theta_init"
-#                 echo "distance_scale: $distance_scale"
-#                 echo "distance_scale_init: $distance_scale_init"
-#                 echo "species: $species"
-#                 echo "fold: $fold"
-#             done
-#         done
-#     done
-#     mkdir -p ./log/satellite/$species
-#     mv ./log/*_${species}.csv ./log/satellite/$species
-# done
+                # Extract the rest of the values
+                distance_scale=$(echo "$line" | cut -d',' -f3-)
+                distance_scale_init=$distance_scale
+                echo "theta_init: $theta_init"
+                echo "distance_scale: $distance_scale"
+                echo "distance_scale_init: $distance_scale_init"
+                echo "species: $species"
+                echo "fold: $fold"
+            done
+        done
+    done
+    mkdir -p ./log/satellite/$species
+    mv ./log/*_${species}.csv ./log/satellite/$species
+done
 
 
 # prediction
