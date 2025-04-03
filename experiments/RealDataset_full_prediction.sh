@@ -22,7 +22,7 @@ N_sub=1000000
 N_sub_bc=$((N_sub/100))
 N_sub_bc_est=200
 
-DATA_DIR="./log/RealDataset"
+DATA_DIR="./log"
 
 train_metadata_path="/p/fscratch/jureap137/data/train_combined.txt"
 test_metadata_path="/p/fscratch/jureap137/data/test_combined.txt"
