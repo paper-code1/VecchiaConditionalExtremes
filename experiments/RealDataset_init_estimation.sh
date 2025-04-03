@@ -27,7 +27,6 @@ DATA_DIR="./log"
 train_metadata_path="/p/fscratch/jureap137/data/train_combined.txt"
 test_metadata_path="/p/fscratch/jureap137/data/test_combined.txt"
 
-init
 theta_init="1,0"
 distance_scale_init="0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2"
 distance_scale="0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2"

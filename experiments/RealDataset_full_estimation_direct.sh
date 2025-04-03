@@ -20,7 +20,7 @@ NN_est=(100 200 400)
 # NN_pred=(200 400 600)
 DIM=10
 kernel_type=Matern72
-maxeval=(1000 1000 1000)
+maxeval=(2000 2000 2000)
 nn_multipliers=(20000 500 500)
 
 DATA_DIR="./log"
@@ -28,16 +28,8 @@ DATA_DIR="./log"
 train_metadata_path="/p/fscratch/jureap137/data/train_combined.txt"
 test_metadata_path="/p/fscratch/jureap137/data/test_combined.txt"
 
-params_path="$DATA_DIR/RealDataset/theta_numPointsTotal${N_sub}_numBlocksTotal${N_sub_bc}_m${N_sub_bc_est}_seed${seed}_isScaled1_RealDataset.csv"
-echo "params_path: $params_path"
-# Read the first line of the CSV file
-line=$(head -n 1 $params_path)
-
-# Extract the first two values
-theta_init=$(echo "$line" | cut -d',' -f1-2)
-
-# Extract the rest of the values
-distance_scale=$(echo "$line" | cut -d',' -f3-)
+theta_init="1,0"
+distance_scale="0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2"
 distance_scale_init=$distance_scale
 echo "theta_init: $theta_init"
 echo "distance_scale: $distance_scale"
@@ -60,8 +52,8 @@ do
             --distance_scale_init "$distance_scale_init" \
             --dim "$DIM" \
             --mode estimation \
-            --xtol_rel 1e-3 \
-            --ftol_rel 1e-5 \
+            --xtol_rel 1e-4 \
+            --ftol_rel 1e-6 \
             --maxeval "$current_maxeval" \
             --train_metadata_path "$train_metadata_path" \
             --test_metadata_path "$test_metadata_path" \
