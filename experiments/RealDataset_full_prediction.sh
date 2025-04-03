@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -N 3
+#SBATCH -N 4
 #SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=72
 #SBATCH -J RealDataset_full_prediction
@@ -83,7 +83,7 @@ do
                     --kernel_type "$kernel_type"\
                     --seed "$seed" \
                     --log_append RealDataset_prediction \
-                    --nn_multiplier 500
+                    --nn_multiplier 1000
             done
         done
         distance_scale=$distance_scale_init
