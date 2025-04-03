@@ -17,7 +17,7 @@ std::vector<BlockInfo> createBlockInfo_test(const std::vector<std::vector<PointM
     std::vector<BlockInfo> blockInfos;
     int numBlocksLocal = localCenters.size();
     blockInfos.resize(numBlocksLocal);
-
+    #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < numBlocksLocal; ++i)
     {
         const auto &localCenter = localCenters[i];

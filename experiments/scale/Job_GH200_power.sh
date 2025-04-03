@@ -1,4 +1,12 @@
 #!/bin/bash
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=72
+#SBATCH -J scaling_GH200_1
+#SBATCH -o scaling_GH200_1.%J.out
+#SBATCH -e scaling_GH200_1.%J.err
+#SBATCH --time=1:00:00
+#SBATCH -A jureap137
 
 N_base_strong=(5000000 5000000 5000000) # larger problem BSV 100/400 GH200
 M_ests=(100 200 400)
