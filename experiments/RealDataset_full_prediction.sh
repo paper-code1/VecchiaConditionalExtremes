@@ -82,7 +82,8 @@ do
                     --test_metadata_path "$test_metadata_path" \
                     --kernel_type "$kernel_type"\
                     --seed "$seed" \
-                    --log_append RealDataset_prediction
+                    --log_append RealDataset_prediction \
+                    --nn_multiplier 500
             done
         done
         distance_scale=$distance_scale_init

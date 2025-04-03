@@ -65,7 +65,8 @@ do
             --test_metadata_path "$test_metadata_path" \
             --kernel_type "$kernel_type"\
             --seed "$seed" \
-            --log_append RealDataset
+            --log_append RealDataset \
+            --nn_multiplier 500
             params_path="$DATA_DIR/theta_numPointsTotal${N}_numBlocksTotal${bc_est}_m${nn_est}_seed${seed}_isScaled1_RealDataset.csv"
             echo "params_path: $params_path"
 
