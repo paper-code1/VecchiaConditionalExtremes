@@ -28,7 +28,8 @@ for index in {0..7}; do
             for i in {1..3}; do
                 bc=$((N/N_b))
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i, nn_multiplier: $nn_multiplier"
-                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
+                # if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
+                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 8000000 -a $m_bv -eq 200 \) -o \( $N -le 12000000 -a $m_bv -eq 100 \) ]; then
                     ./bin/dbv \
                         --num_total_points $N \
                         --num_total_blocks $bc \

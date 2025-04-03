@@ -1,25 +1,27 @@
-#!/bin/bash
-#SBATCH -N 1
+#!/bin/bash -x
+#SBATCH --account=rcfd
+#SBATCH --nodes=8
+#SBATCH --ntasks=32
 #SBATCH --ntasks-per-node=4
-#SBATCH --cpus-per-task=72
-#SBATCH -J scaling_GH200_4
-#SBATCH -o scaling_GH200_4.%J.out
-#SBATCH -e scaling_GH200_4.%J.err
-#SBATCH --time=1:00:00
-#SBATCH -A jureap137
+#SBATCH --cpus-per-task=32
+#SBATCH --output=A100_scaling_32.%j
+#SBATCH --error=A100_scaling_32-err.%j
+#SBATCH --time=2:00:00 
+#SBATCH --partition=dc-gpu
+#SBATCH --gres=gpu:4
 
-N_base_strong=(5000000 5000000 5000000) # larger problem BSV 100/400 GH200
+N_base_strong=(2000000 2000000 2000000) # larger problem BSV 100/400 A100
 M_ests=(100 200 400)
 nn_multipliers=(300 300 500)
 N_bs=(100 100 100)
-num_GPUs=4
+num_GPUs=32
 num_runs=3
 DIM=10
 theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
-for index in {0..1}; do
+for index in {0..2}; do
     # Calculate N_base_weak as N_base_strong[0] * (2^(0.6))
     N_base_weak=$((N_base_strong[$index]*num_GPUs))
     N_bs_weak=${N_bs[0]}
@@ -45,13 +47,13 @@ for index in {0..1}; do
             --kernel_type Matern72 \
             --seed $i \
             --nn_multiplier $nn_multiplier_weak \
-            --log_append GH200_scaling_4\
-            --omp_num_threads 72 \
+            --log_append A100_scaling_32\
+            --omp_num_threads 32 \
             --print=false
     done
 done
 
-for index in {0..1}; do
+for index in {0..2}; do
     N_base_strong=$((N_base_strong[$index]))
     N_bs_strong=${N_bs[0]}
     N_bc_strong=$((N_base_strong/N_bs_strong))
@@ -76,11 +78,11 @@ for index in {0..1}; do
             --kernel_type Matern72 \
             --seed $i \
             --nn_multiplier $nn_multiplier_strong \
-            --log_append GH200_scaling_4\
-            --omp_num_threads 72 \
+            --log_append A100_scaling_32\
+            --omp_num_threads 32 \
             --print=false
     done
 done
 
-mkdir -p ./log/GH200_scaling
-mv ./log/*_GH200_scaling_4.csv ./log/GH200_scaling/
+mkdir -p ./log/A100_scaling
+mv ./log/*_A100_scaling_32.csv ./log/A100_scaling/

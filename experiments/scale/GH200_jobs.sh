@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Submit the single-node GH200 benchmarks (split into 3 parts)
-sbatch experiments/scale/Job_GH200_single_part1.sh
-sbatch experiments/scale/Job_GH200_single_part2.sh
-sbatch experiments/scale/Job_GH200_single_part3.sh
+# # Submit the single-node GH200 benchmarks (split into 3 parts)
+# sbatch experiments/scale/Job_GH200_single_part1.sh
+# sbatch experiments/scale/Job_GH200_single_part2.sh
+# sbatch experiments/scale/Job_GH200_single_part3.sh
 
 # Submit the base scaling job (1 GPU)
 sbatch experiments/scale/Job_GH200_1.sh

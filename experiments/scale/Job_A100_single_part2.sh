@@ -1,35 +1,36 @@
-#!/bin/bash
-#SBATCH -N 1
+#!/bin/bash -x
+#SBATCH --account=rcfd
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=72
-#SBATCH -J Single_GH200
-#SBATCH -o Single_GH200.%J.out
-#SBATCH -e Single_GH200.%J.err
-#SBATCH --time=10:00:00
-#SBATCH -A jureap137
+#SBATCH --cpus-per-task=32
+#SBATCH --output=A100_single2.%j
+#SBATCH --error=A100_single2-err.%j
+#SBATCH --time=10:00:00 
+#SBATCH --partition=dc-gpu
+#SBATCH --gres=gpu:1
 
-N_all=(16000000 18000000 20000000 22000000)
+N_all=(800000 1000000 2000000 3000000 4000000) #
 N_bs=(100)
 M_ests=(100 200 400)
-nn_multipliers=(100 200 500)
+nn_multipliers=(300 300 500)
 
 DIM=10
 theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
-for index in {0..3}; do
+for index in {0..4}; do
     N=${N_all[$index]}
-    # Scaled block Vecchia
     for index_est in {0..2}; do
         m_bv=${M_ests[$index_est]}
         nn_multiplier=${nn_multipliers[$index_est]}
+        # Scaled block Vecchia
         for N_b in ${N_bs[@]}; do
             for i in {1..3}; do
                 bc=$((N/N_b))
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i, nn_multiplier: $nn_multiplier"
-                # if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
-                if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 8000000 -a $m_bv -eq 200 \) -o \( $N -le 12000000 -a $m_bv -eq 100 \) ]; then
+                if [ \( $N -le 2000000 -a $m_bv -eq 400 \) -o \( $N -le 4000000 -a $m_bv -eq 200 \) -o \( $N -le 7000000 -a $m_bv -eq 100 \) ]; then # just show a trend, scability is shown in other experiments
                     ./bin/dbv \
                         --num_total_points $N \
                         --num_total_blocks $bc \
@@ -45,8 +46,8 @@ for index in {0..3}; do
                         --kernel_type Matern72 \
                         --seed $i \
                         --nn_multiplier $nn_multiplier \
-                        --log_append GH200_single \
-                        --omp_num_threads 72 \
+                        --log_append A100_single \
+                        --omp_num_threads 32 \
                         --print=false
                 fi
             done
@@ -54,5 +55,5 @@ for index in {0..3}; do
     done
 done
 
-mkdir -p ./log/GH200_single
-mv ./log/*_GH200_single.csv ./log/GH200_single/
+mkdir -p ./log/A100_single
+mv ./log/*_A100_single.csv ./log/A100_single/
