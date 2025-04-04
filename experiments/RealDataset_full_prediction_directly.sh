@@ -1,19 +1,20 @@
 #!/bin/bash
 #SBATCH -N 4
-#SBATCH --gpus-per-task=1
 #SBATCH --ntasks-per-node=4
+#SBATCH --ntasks=16        
+#SBATCH --gpus-per-node=4  
+#SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=72
 #SBATCH -J RealDataset_full_prediction
 #SBATCH -o RealDataset_full_prediction.%J.out
 #SBATCH -e RealDataset_full_prediction.%J.err
 #SBATCH --time=4:00:00
-#SBATCH --gres=gpu:4 
 #SBATCH -A jureap137
 
 N=45000000
 N_TEST=5000000
 BlockCount=(450000)
-BlockCount_TEST=(500000)
+BlockCount_TEST=(1000000)
 NN_est=(100 200 400)
 NN_pred=(100 200 400 600) # 
 DIM=10
@@ -69,7 +70,7 @@ do
                     --kernel_type "$kernel_type"\
                     --seed "$seed" \
                     --log_append RealDataset_prediction \
-                    --nn_multiplier 50
+                    --nn_multiplier 200
             done
         done
         distance_scale=$distance_scale_init

@@ -64,8 +64,8 @@ void partitionPoints(const std::vector<PointMetadata> &localMetadata, std::vecto
     std::vector<int> sendCounts(size, 0);
     std::vector<int> sendDisplacements(size, 0);
     // choose the most relevant scaling parameters (max index of opts.distance_scale)
-    // int min_index = std::min_element(opts.distance_scale.begin(), opts.distance_scale.end()) - opts.distance_scale.begin();
-    int min_index = 0; // try on prediction
+    int min_index = std::min_element(opts.distance_scale.begin(), opts.distance_scale.end()) - opts.distance_scale.begin();
+    // int min_index = 0; // try on prediction
     double min_distance_scale = opts.distance_scale[min_index];
 
     std::vector<std::vector<PointMetadata>> sendBuffers(size);

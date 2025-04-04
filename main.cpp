@@ -116,6 +116,7 @@ int main(int argc, char **argv)
         std::cout << "The distance threshold_finer: " << opts.distance_threshold_finer << std::endl;
         std::cout << "Dimension: " << opts.dim << std::endl;
         std::cout << "Range offset: " << opts.range_offset << std::endl;
+        std::cout << "Number of processes: " << size << std::endl;
         std::cout << "Distance scale: ";
         for (auto scale : opts.distance_scale) {
             std::cout << scale << ", ";
@@ -194,6 +195,8 @@ int main(int argc, char **argv)
         }
     }
     std::cout << "rank: " << rank << ", Number of points in localPoints: " << localPoints_partition.size() << std::endl;
+    std::cout << "rank: " << rank << ", Number of points in localPoints_test: " << localPoints_partition_test.size() << std::endl;
+
 
     auto start_total = std::chrono::high_resolution_clock::now();
 
