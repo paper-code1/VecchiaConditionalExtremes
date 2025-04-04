@@ -95,7 +95,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
 
     // Get the total number of GPUs available on the current node
     int local_gpu_count = 0;
-    cudaGetDeviceCount(&local_gpu_count);
+    cudaGetDeviceCount(&local_gpu_count); // slurm, it's always 1
     if (local_gpu_count == 0) {
         std::cerr << "No GPUs found on this node for rank " << rank << std::endl;
         MPI_Comm_free(&node_comm);

@@ -106,6 +106,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             
             // For each block, check if it's within distance threshold of this center
             for (const auto &blockInfo : blockInfos) {
+                int globalOrder = blockInfo.globalOrder;
                 // Calculate distance between block center and the current center
                 double distance = calculateDistance(blockInfo.center, center);
                 // If within threshold, send to the corresponding rank

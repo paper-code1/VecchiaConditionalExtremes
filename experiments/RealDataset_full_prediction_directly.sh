@@ -14,7 +14,7 @@
 N=45000000
 N_TEST=5000000
 BlockCount=(450000)
-BlockCount_TEST=(1000000)
+BlockCount_TEST=(500000)
 NN_est=(100 200 400)
 NN_pred=(100 200 400 600) # 
 DIM=10
