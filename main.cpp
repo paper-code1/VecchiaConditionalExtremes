@@ -194,6 +194,7 @@ int main(int argc, char **argv)
             localPoints_partition_test = localPoints_test;
         }
     }
+    std::cout << "rank: " << rank << ", gpu_id: " << opts.gpu_id << std::endl;
     std::cout << "rank: " << rank << ", Number of points in localPoints: " << localPoints_partition.size() << std::endl;
     std::cout << "rank: " << rank << ", Number of points in localPoints_test: " << localPoints_partition_test.size() << std::endl;
 

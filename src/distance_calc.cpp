@@ -96,38 +96,61 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
     std::vector<std::vector<std::vector<BlockInfo>>> private_sendBuffers(omp_get_max_threads(), std::vector<std::vector<BlockInfo>>(size));
 
     // Parallelize loop over centers with a chunking strategy
-    #pragma omp parallel for schedule(dynamic)
-    for (int i=0; i<allCenterRanks.size(); ++i){
-        int thread_id = omp_get_thread_num();
-        const auto &centerRank = allCenterRanks[i];
-        const auto &center = centerRank.first;
-        int destRank = centerRank.second;
-        
-        // For each block, check if it's within distance threshold of this center
-        for (const auto &blockInfo : blockInfos) {
-            int globalOrder = blockInfo.globalOrder;
-            if (globalOrder >= i){
-                continue;
-            }
-
-            // Send first m_const blocks to all processors to ensure enough blocks
-            if (globalOrder < m_const) {
-                for (int dest = 0; dest < size; ++dest) {
-                    if (private_blockIndexSets[thread_id][dest].find(globalOrder) == private_blockIndexSets[thread_id][dest].end()) {
-                        private_sendBuffers[thread_id][dest].push_back(blockInfo);
-                        private_blockIndexSets[thread_id][dest].insert(globalOrder);
+    if (pred_tag){
+        #pragma omp parallel for schedule(dynamic)
+        for (int i=0; i<allCenterRanks.size(); ++i){
+            int thread_id = omp_get_thread_num();
+            const auto &centerRank = allCenterRanks[i];
+            const auto &center = centerRank.first;
+            int destRank = centerRank.second;
+            
+            // For each block, check if it's within distance threshold of this center
+            for (const auto &blockInfo : blockInfos) {
+                // Calculate distance between block center and the current center
+                double distance = calculateDistance(blockInfo.center, center);
+                // If within threshold, send to the corresponding rank
+                if (distance < distance_threshold_dynamic) {
+                    if (private_blockIndexSets[thread_id][destRank].find(globalOrder) == private_blockIndexSets[thread_id][destRank].end()) {
+                        private_sendBuffers[thread_id][destRank].push_back(blockInfo);
+                        private_blockIndexSets[thread_id][destRank].insert(globalOrder);
                     }
                 }
-                continue;
             }
+        }
+    }else{
+        #pragma omp parallel for schedule(dynamic)
+        for (int i=0; i<allCenterRanks.size(); ++i){
+            int thread_id = omp_get_thread_num();
+            const auto &centerRank = allCenterRanks[i];
+            const auto &center = centerRank.first;
+            int destRank = centerRank.second;
             
-            // Calculate distance between block center and the current center
-            double distance = calculateDistance(blockInfo.center, center);
-            // If within threshold, send to the corresponding rank
-            if (distance < distance_threshold_dynamic) {
-                if (private_blockIndexSets[thread_id][destRank].find(globalOrder) == private_blockIndexSets[thread_id][destRank].end()) {
-                    private_sendBuffers[thread_id][destRank].push_back(blockInfo);
-                    private_blockIndexSets[thread_id][destRank].insert(globalOrder);
+            // For each block, check if it's within distance threshold of this center
+            for (const auto &blockInfo : blockInfos) {
+                int globalOrder = blockInfo.globalOrder;
+                if (globalOrder >= i){
+                    continue;
+                }
+
+                // Send first m_const blocks to all processors to ensure enough blocks
+                if (globalOrder < m_const) {
+                    for (int dest = 0; dest < size; ++dest) {
+                        if (private_blockIndexSets[thread_id][dest].find(globalOrder) == private_blockIndexSets[thread_id][dest].end()) {
+                            private_sendBuffers[thread_id][dest].push_back(blockInfo);
+                            private_blockIndexSets[thread_id][dest].insert(globalOrder);
+                        }
+                    }
+                    continue;
+                }
+                
+                // Calculate distance between block center and the current center
+                double distance = calculateDistance(blockInfo.center, center);
+                // If within threshold, send to the corresponding rank
+                if (distance < distance_threshold_dynamic) {
+                    if (private_blockIndexSets[thread_id][destRank].find(globalOrder) == private_blockIndexSets[thread_id][destRank].end()) {
+                        private_sendBuffers[thread_id][destRank].push_back(blockInfo);
+                        private_blockIndexSets[thread_id][destRank].insert(globalOrder);
+                    }
                 }
             }
         }
