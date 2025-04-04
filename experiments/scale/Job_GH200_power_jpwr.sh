@@ -18,7 +18,7 @@ theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 NUM_GPU=1
-CPU_power_cap=(100 200) # please set the power cap for the CPU
+CPU_power_cap=(100) # please set the power cap for the CPU # 100 200
 
 # Create monitoring directory
 mkdir -p ./log/GH200_power_cpu_${CPU_power_cap}/monitoring
@@ -35,29 +35,27 @@ for index in {0..2}; do
         echo "N: $N, bc: $bc, m_bv: $m_bv"
         
         exp_id="N${N}_m${m_bv}_i${i}_gpu${NUM_GPU}_power"
-        for CPU_power_cap in ${CPU_power_cap[@]}; do
-            # Start the main process in background and get its PID
-            srun --grace-power-cap=$CPU_power_cap jpwr --methods pynvml gh \
-              --df-out ./log/GH200_power_cpu_${CPU_power_cap}/monitoring/ \
-              --df-filetype csv -- ./bin/dbv \
-                --num_total_points $N \
-                --num_total_blocks $bc \
-                --distance_scale $distance_scale \
-                --distance_scale_init $distance_scale_init \
-                --theta_init $theta_init \
-                -m $m_bv \
-                --dim $DIM \
-                --mode estimation \
-                --maxeval 500 \
-                --xtol_rel 1e-8 \
-                --ftol_rel 1e-8 \
-                --kernel_type Matern72 \
-                --seed $i \
-                --nn_multiplier $nn_multiplier \
-                --log_append GH200_power_cpu_${CPU_power_cap}\
-                --omp_num_threads 72 \
-                --print=false
-        done
+        # Start the main process in background and get its PID
+        srun --grace-power-cap=$CPU_power_cap jpwr --methods pynvml gh \
+            --df-out ./log/GH200_power_cpu_${CPU_power_cap}/monitoring/ \
+            --df-filetype csv --df-suffix m_${m_bv} -- ./bin/dbv \
+            --num_total_points $N \
+            --num_total_blocks $bc \
+            --distance_scale $distance_scale \
+            --distance_scale_init $distance_scale_init \
+            --theta_init $theta_init \
+            -m $m_bv \
+            --dim $DIM \
+            --mode estimation \
+            --maxeval 500 \
+            --xtol_rel 1e-8 \
+            --ftol_rel 1e-8 \
+            --kernel_type Matern72 \
+            --seed $i \
+            --nn_multiplier $nn_multiplier \
+            --log_append GH200_power_cpu_${CPU_power_cap}\
+            --omp_num_threads 72 \
+            --print=false
     done
 done
 

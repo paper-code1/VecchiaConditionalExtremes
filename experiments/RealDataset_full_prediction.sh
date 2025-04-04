@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH -N 4
+#SBATCH --gpus-per-task=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=72
 #SBATCH -J RealDataset_full_prediction
