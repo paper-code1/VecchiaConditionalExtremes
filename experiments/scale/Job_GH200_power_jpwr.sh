@@ -8,7 +8,7 @@
 #SBATCH --time=1:00:00
 #SBATCH -A jureap137
 
-N_base_strong=(50000 50000 50000) # larger problem BSV 100/400 GH200
+N_base_strong=(5000000 5000000 5000000) # larger problem BSV 100/400 GH200
 M_ests=(100 200 400)
 N_bs=(100 100 100)
 nn_multipliers=(300 300 500)
