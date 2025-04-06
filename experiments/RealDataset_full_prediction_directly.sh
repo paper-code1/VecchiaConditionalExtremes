@@ -14,7 +14,7 @@
 N=45000000
 N_TEST=5000000
 BlockCount=(450000)
-BlockCount_TEST=(500000)
+BlockCount_TEST=(250000)
 NN_est=(100 200 400)
 NN_pred=(100 200 400 600) # 
 DIM=10
@@ -70,7 +70,7 @@ do
                     --kernel_type "$kernel_type"\
                     --seed "$seed" \
                     --log_append RealDataset_prediction \
-                    --nn_multiplier 200
+                    --nn_multiplier 50
             done
         done
         distance_scale=$distance_scale_init
