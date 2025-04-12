@@ -54,8 +54,8 @@ run_sim <- function(ts, tv, dv, de, dp, da, ds, dh, dr, ve, nsteps = 100){
   return(sum(out_H$value))  # Normalize by total population
 }
 
-# Generate 1M samples
-n_samples <- 1000
+# Generate 1M samples (5 hours on 40 cores, 1 hours on 192 cores)
+n_samples <- 1000000
 
 # Load parallel processing package
 library(parallel)

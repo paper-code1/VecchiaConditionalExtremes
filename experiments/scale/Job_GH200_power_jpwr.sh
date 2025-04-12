@@ -18,7 +18,7 @@ theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 NUM_GPU=1
-CPU_power_cap=(100) # please set the power cap for the CPU # 100 200
+CPU_power_cap=(200) # please set the power cap for the CPU # 100 200
 
 # Create monitoring directory
 mkdir -p ./log/GH200_power_cpu_${CPU_power_cap}/monitoring

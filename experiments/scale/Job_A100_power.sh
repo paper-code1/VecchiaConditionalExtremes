@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --output=A100_power.%j
 #SBATCH --error=A100_power-err.%j
-#SBATCH --time=2:00:00 
+#SBATCH --time=1:00:00 
 #SBATCH --partition=dc-gpu
 #SBATCH --gres=gpu:1
 

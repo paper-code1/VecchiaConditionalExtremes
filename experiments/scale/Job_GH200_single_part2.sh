@@ -5,7 +5,7 @@
 #SBATCH -J Single_GH200
 #SBATCH -o Single_GH200.%J.out
 #SBATCH -e Single_GH200.%J.err
-#SBATCH --time=10:00:00
+#SBATCH --time=22:00:00
 #SBATCH -A jureap137
 
 N_all=(800000 1000000 2000000 3000000 4000000 5000000 6000000 7000000 8000000 9000000 10000000 12000000) #
@@ -25,7 +25,7 @@ for index in {0..11}; do
         nn_multiplier=${nn_multipliers[$index_est]}
         # Scaled block Vecchia
         for N_b in ${N_bs[@]}; do
-            for i in {1..3}; do
+            for i in {1..5}; do
                 bc=$((N/N_b))
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i, nn_multiplier: $nn_multiplier"
                 # if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then

@@ -237,9 +237,9 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData
         if (std::abs(true_observations[i]) > 1e-5) {  // Avoid division by zero
             double rmspe = std::pow(100 * (sample_means[i] - true_observations[i]) / true_observations[i], 2);
             local_rmspe_sum += rmspe;
-            if (rmspe > 500){
-                std::cout << "rank: " << rank << " abnormal rmspe: " << rmspe << " sample_means: " << sample_means[i] << " true_observations: " << true_observations[i] << std::endl;
-            }
+            // if (rmspe > 500){
+            //     std::cout << "rank: " << rank << " abnormal rmspe: " << rmspe << " sample_means: " << sample_means[i] << " true_observations: " << true_observations[i] << std::endl;
+            // }
         }
         // print the sample mean and true observation
         // Save prediction results to CSV file

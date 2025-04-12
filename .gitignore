@@ -6,10 +6,14 @@ obj/
 HST/
 HST_source/
 log/
+experiments/satellite/fig/
+experiments/scale/fig/
+experiments/metaRVM/fig/
+experiments/simulations/fig/
 
 experiments/fig/
 experiments/fig_backup/
-
+experiments/simulations/*.csv
 /*.ipynb
 *.txt
 *.pdf

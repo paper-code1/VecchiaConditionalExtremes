@@ -5,7 +5,7 @@
 #SBATCH -J Single_GH200
 #SBATCH -o Single_GH200.%J.out
 #SBATCH -e Single_GH200.%J.err
-#SBATCH --time=10:00:00
+#SBATCH --time=4:00:00
 #SBATCH -A jureap137
 
 N_all=(10000 30000 70000 100000 300000 500000 700000)
@@ -25,7 +25,7 @@ for index in {0..7}; do
         m_bv=${M_ests[$index_est]}
         nn_multiplier=${nn_multipliers[$index_est]}
         for N_b in ${N_bs[@]}; do
-            for i in {1..3}; do
+            for i in {1..5}; do
                 bc=$((N/N_b))
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i, nn_multiplier: $nn_multiplier"
                 # if [ \( $N -le 5000000 -a $m_bv -eq 400 \) -o \( $N -le 13000000 -a $m_bv -eq 200 \) -o \( $N -le 22000000 -a $m_bv -eq 100 \) ]; then
@@ -55,7 +55,7 @@ for index in {0..7}; do
 
     # Scaled Vecchia
     if [ $N -le 500000 ]; then # more than 500k takes a lot of time, not worth it, just show a trend
-        for i in {1..3}; do
+        for i in {1..5}; do
            ./bin/dbv \
                 --num_total_points $N \
                 --num_total_blocks $N \

@@ -6,7 +6,7 @@
 #SBATCH -J benchmark_data
 #SBATCH -o benchmark_data.%J.out
 #SBATCH -e benchmark_data.%J.err
-#SBATCH --time=2:00:00
+#SBATCH --time=8:00:00
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mem=400G # try larger memory
 

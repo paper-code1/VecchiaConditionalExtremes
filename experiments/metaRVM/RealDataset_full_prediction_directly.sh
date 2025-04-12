@@ -8,7 +8,7 @@
 #SBATCH -J RealDataset_full_prediction
 #SBATCH -o RealDataset_full_prediction.%J.out
 #SBATCH -e RealDataset_full_prediction.%J.err
-#SBATCH --time=4:00:00
+#SBATCH --time=1:00:00
 #SBATCH -A jureap137
 
 N=45000000

@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --output=A100_single1.%j
 #SBATCH --error=A100_single1-err.%j
-#SBATCH --time=10:00:00 
+#SBATCH --time=4:00:00 
 #SBATCH --partition=dc-gpu
 #SBATCH --gres=gpu:1
 
@@ -27,7 +27,7 @@ for index in {0..6}; do
         m_bv=${M_ests[$index_est]}
         nn_multiplier=${nn_multipliers[$index_est]}
         for N_b in ${N_bs[@]}; do
-            for i in {1..3}; do
+            for i in {1..5}; do
                 bc=$((N/N_b))
                 echo "N: $N, bc: $bc, m_bv: $m_bv, seed: $i, nn_multiplier: $nn_multiplier"
                 if [ \( $N -le 2000000 -a $m_bv -eq 400 \) -o \( $N -le 4000000 -a $m_bv -eq 200 \) -o \( $N -le 7000000 -a $m_bv -eq 100 \) ]; then

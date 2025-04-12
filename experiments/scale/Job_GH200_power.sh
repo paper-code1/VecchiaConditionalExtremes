@@ -33,7 +33,7 @@ monitor_resources() {
     
     # Monitor GPU stats every 5 seconds
     nvidia-smi --query-gpu=timestamp,index,power.draw,utilization.gpu,memory.used,memory.total,temperature.gpu \
-        --format=csv -l 3 > "./log/GH200_power_cpu_${CPU_power_cap}/monitoring/gpu_${exp_id}.log" &
+        --format=csv -l 0.1 > "./log/GH200_power_cpu_${CPU_power_cap}/monitoring/gpu_${exp_id}.log" &
     GPU_PID=$!
 }
 
