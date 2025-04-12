@@ -3,7 +3,7 @@
 N=5000
 bc=(50 100 200 300 400 500 600)
 m_bv=(5 10 20 30 60 90 120 150 180 210 240 270)
-DATA_DIR="./maternSimuData"
+DATA_DIR="./experiments/simulations/maternSimuData"
 train_metadata_path="$DATA_DIR/training_data_kl.csv"
 params_path="$DATA_DIR/hyperparameters.csv"
 DIM=8
