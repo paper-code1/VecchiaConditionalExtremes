@@ -50,6 +50,10 @@ The following libraries and tools are required:
 
 The build system will automatically detect available GPUs and configure the compilation accordingly.
 
+## Reproducity 
+
+See `experiments/`
+
 ## Usage
 
 ### Basic Examples
@@ -208,9 +212,6 @@ For optimal performance:
 4. Use `--nn_multiplier` to control the coarseness of nearest neighbor search
 5. For higher-dimensional problems, tune `--distance_scale` parameters to give appropriate weights to different dimensions
 
-## Reproducity 
-
-See `experiments`
 
 ## Citation
 
