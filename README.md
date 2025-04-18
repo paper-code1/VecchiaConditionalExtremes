@@ -1,10 +1,10 @@
-# Distributed Block Scaled Vecchia Approximation for Gaussian Processes (BSV-GP)
+# Distributed Scaled Block Vecchia Approximation for Gaussian Processes (SBV-GP)
 
-This repository contains the implementation of the Distributed Block Scaled Vecchia (BSV) method for large-scale Gaussian Process approximation. The code provides a highly efficient distributed implementation optimized for GPU acceleration that can handle massive datasets.
+This repository contains the implementation of the Distributed Scaled Block Vecchia (SBV) method for large-scale Gaussian Process approximation. The code provides a highly efficient distributed implementation optimized for GPU acceleration that can handle massive datasets.
 
 ## Overview
 
-BSV-GP is a scalable method for approximating Gaussian Processes that:
+SBV-GP is a scalable method for approximating Gaussian Processes that:
 
 - Uses a block-based approach to partition data
 - Leverages GPU acceleration for covariance computations
@@ -34,12 +34,11 @@ The following libraries and tools are required:
 - CMake (≥ 3.21)
 
 ## Installation
-
+<!-- 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/jack-pan-ai/BSV-GPs.git
    cd BSV-GPs
-   ```
+   ``` -->
 
 2. Build the code:
    ```bash
@@ -68,7 +67,7 @@ mpirun -np 4 ./bin/dbv --num_total_points 8000000 --num_total_blocks 80000 -m 40
 
 ### Command Line Options
 
-BSV-GP provides many configuration options:
+SBV-GP provides many configuration options:
 
 #### Data Configuration
 - `--num_total_points <N>`: Total number of points in the dataset (default: 20000)
