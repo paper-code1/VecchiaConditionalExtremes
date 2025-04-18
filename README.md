@@ -9,7 +9,6 @@ SBV-GP is a scalable method for approximating Gaussian Processes that:
 - Uses a block-based approach to partition data
 - Leverages GPU acceleration for covariance computations
 - Distributes computation across multiple nodes with MPI
-- Supports different covariance kernels including Matérn family
 
 The implementation is optimized for modern high-performance computing environments with multi-GPU support.
 
@@ -18,7 +17,6 @@ The implementation is optimized for modern high-performance computing environmen
 - **Scalable**: Handles millions of data points with efficient block-based partitioning
 - **GPU-Accelerated**: Optimized for NVIDIA GPUs with MAGMA linear algebra acceleration
 - **Distributed**: MPI-based implementation for multi-node execution
-- **Flexible Covariance Functions**: Supports multiple kernels including PowerExponential and Matérn family (1/2, 3/2, 5/2, 7/2)
 - **Parameter Estimation**: Implements efficient likelihood-based parameter optimization
 - **Prediction**: Fast prediction at new locations by leveraging the approximation structure
 
