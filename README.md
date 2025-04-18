@@ -26,19 +26,18 @@ The implementation is optimized for modern high-performance computing environmen
 
 The following libraries and tools are required:
 
-- C++ compiler (GCC ≥ 10.2.0)
-- CUDA (≥ 11.6)
-- MAGMA (≥ 2.7.0) - GPU-accelerated linear algebra library
-- NLopt (≥ 2.7.0) - Nonlinear optimization library
-- OpenMPI (≥ 4.1.0) - MPI implementation
-- CMake (≥ 3.21)
+- C++ compiler GCC 13.3.0
+- CUDA 11.8/12/9
+- MAGMA 2.7.2 - GPU-accelerated linear algebra library
+- NLopt 2.7.1 - Nonlinear optimization library
+- OpenMPI 5.0.5 - MPI implementation
 
 ## Installation
-<!-- 
+
 1. Clone the repository:
    ```bash
-   cd BSV-GPs
-   ``` -->
+   cd DSBV-GPs
+   ```
 
 2. Build the code:
    ```bash
