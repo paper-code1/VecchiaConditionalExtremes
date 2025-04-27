@@ -39,11 +39,8 @@ The following libraries and tools are required:
 
 2. Build the code:
    ```bash
-   # For systems using OpenMPI
-   make SYSTEM=OPENMPI
-   
-   # For Cray systems 
-   make SYSTEM=CRAY
+   # For slurm systems
+   make -j 8
    ```
 
 The build system will automatically detect available GPUs and configure the compilation accordingly.
