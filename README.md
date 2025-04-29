@@ -34,7 +34,7 @@ The following libraries and tools are required:
 
 1. Clone the repository:
    ```bash
-   cd DSBV-GPs
+   cd ParallelScaledBlockVecchiaGP
    ```
 
 2. Build the code:
