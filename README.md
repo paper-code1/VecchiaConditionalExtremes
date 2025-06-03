@@ -34,16 +34,13 @@ The following libraries and tools are required:
 
 1. Clone the repository:
    ```bash
-   cd DSBV-GPs
+   cd ParallelScaledBlockVecchiaGP
    ```
 
 2. Build the code:
    ```bash
-   # For systems using OpenMPI
-   make SYSTEM=OPENMPI
-   
-   # For Cray systems 
-   make SYSTEM=CRAY
+   # For slurm systems
+   make -j 8
    ```
 
 The build system will automatically detect available GPUs and configure the compilation accordingly.
@@ -59,9 +56,6 @@ See `experiments/`
 To run a simple example using a single GPU:
 
 ```bash
-# For systems with SLURM (specify your node in batch files)
-srun ./bin/dbv --num_total_points 2000000 --num_total_blocks 10000 -m 800 --dim 10 --mode estimation --maxeval 100 --theta_init 1.5,0.0 --distance_scale 0.05,0.5,0.05,1,1,1,1,1,1,1 --kernel_type Matern72 --nn_multiplier 10 --seed 7
-
 # For systems without SLURM (direct MPI execution)
 mpirun -np 4 ./bin/dbv --num_total_points 8000000 --num_total_blocks 80000 -m 400 --dim 10 --mode estimation --maxeval 100 --theta_init 1.5,0.0 --distance_scale 1,1,1,1,1,1,1,1,1,1 --kernel_type Matern72 --nn_multiplier 10 --seed 8
 ```
