@@ -19,10 +19,10 @@ void finerPartition(const std::vector<PointMetadata>& points, int numBlocksPerPr
 std::vector<std::vector<double>> calculateCentersOfGravity(const std::vector<std::vector<PointMetadata>> &finerPartitions, const Opts& opts);
 
 // Function to send centers of gravity to processor 0
-void sendCentersOfGravityToRoot(const std::vector<std::vector<double>>& centers, std::vector<std::pair<std::vector<double>, int>>& allCenters, const Opts& opts);
+void AllGatherCenters(const std::vector<std::vector<double>>& centers, std::vector<std::pair<std::vector<double>, int>>& allCenters, const Opts& opts);
 
 // Function to randomly reorder centers at processor 0
-void reorderCenters(std::vector<std::pair<std::vector<double>, int>>& allCenters, const Opts& opts);
+void reorderCenters(std::vector<std::vector<double>>& centers, std::vector<std::pair<std::vector<double>, int>>& allCenters, std::vector<int>& permutation, std::vector<int>& localPermutation, const Opts& opts);
 
 // Function to broadcast reordered centers to all processors
 void broadcastCenters(std::vector<std::pair<std::vector<double>, int>>& allCenters, int numCenters, const Opts& opts);

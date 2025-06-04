@@ -69,7 +69,14 @@ std::vector<BlockInfo> unpackBlockInfo(const std::vector<double> &buffer, const 
     return blocks;
 }
 
-std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks, const std::vector<std::pair<std::vector<double>, int>> &CenterRanks_test, double distance_threshold, const Opts& opts, bool pred_tag)
+std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
+    const std::vector<std::pair<std::vector<double>, int>> &CenterRanks, 
+    const std::vector<std::pair<std::vector<double>, int>> &CenterRanks_test, 
+    double distance_threshold, 
+    const std::vector<int>& permutation, 
+    const std::vector<int>& localPermutation, 
+    const Opts& opts, 
+    bool pred_tag)
 {
     // returned: receivedBlocks, which is within the MC-NN based range
     int rank, size;
@@ -129,7 +136,7 @@ std::vector<BlockInfo> processAndSendBlocks(std::vector<BlockInfo> &blockInfos, 
             // For each block, check if it's within distance threshold of this center
             for (const auto &blockInfo : blockInfos) {
                 int globalOrder = blockInfo.globalOrder;
-                if (globalOrder >= i){
+                if (globalOrder >= permutation[i]){
                     continue;
                 }
 

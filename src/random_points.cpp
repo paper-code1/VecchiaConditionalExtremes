@@ -308,8 +308,8 @@ std::vector<std::vector<double>> calculateCentersOfGravity(const std::vector<std
     return centers;
 }
 
-// Function to send centers of gravity to processor 0
-void sendCentersOfGravityToRoot(const std::vector<std::vector<double>> &centers, std::vector<std::pair<std::vector<double>, int>> &allCenters, const Opts &opts)
+// Function to send centers of gravity to all processors
+void AllGatherCenters(const std::vector<std::vector<double>> &centers, std::vector<std::pair<std::vector<double>, int>> &allCenters, const Opts &opts)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -317,18 +317,17 @@ void sendCentersOfGravityToRoot(const std::vector<std::vector<double>> &centers,
 
     int numCenters = centers.size();
     std::vector<int> recvCounts(size, 0);
-    MPI_Gather(&numCenters, 1, MPI_INT, recvCounts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+    // Use Allgather instead of Gather to get counts on all nodes
+    MPI_Allgather(&numCenters, 1, MPI_INT, recvCounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     std::vector<int> displacements(size, 0);
     int totalCenters = 0;
-    if (rank == 0)
+    // Calculate displacements and total centers on all nodes
+    for (int i = 0; i < size; ++i)
     {
-        for (int i = 0; i < size; ++i)
-        {
-            displacements[i] = totalCenters * (opts.dim + 1); // +1 for rank
-            totalCenters += recvCounts[i];
-            recvCounts[i] *= (opts.dim + 1); // Each center has DIMENSION doubles + rank
-        }
+        displacements[i] = totalCenters * (opts.dim + 1); // +1 for rank
+        totalCenters += recvCounts[i];
+        recvCounts[i] *= (opts.dim + 1); // Each center has DIMENSION doubles + rank
     }
 
     // Create send buffer with center coordinates and rank
@@ -343,44 +342,64 @@ void sendCentersOfGravityToRoot(const std::vector<std::vector<double>> &centers,
         sendBuffer[i * (opts.dim + 1) + opts.dim] = static_cast<double>(rank);
     }
 
-    std::vector<double> recvBuffer;
-    if (rank == 0)
-    {
-        recvBuffer.resize(totalCenters * (opts.dim + 1));
-    }
-    MPI_Gatherv(sendBuffer.data(), numCenters * (opts.dim + 1), MPI_DOUBLE, 
-                recvBuffer.data(), recvCounts.data(), displacements.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // Allocate receive buffer on all nodes
+    std::vector<double> recvBuffer(totalCenters * (opts.dim + 1));
+    
+    // Use Allgatherv instead of Gatherv to send data to all nodes
+    MPI_Allgatherv(sendBuffer.data(), numCenters * (opts.dim + 1), MPI_DOUBLE, 
+                   recvBuffer.data(), recvCounts.data(), displacements.data(), MPI_DOUBLE, MPI_COMM_WORLD);
 
-    if (rank == 0)
+    // Process received data on all nodes
+    allCenters.clear();
+    allCenters.resize(totalCenters);
+    
+    for (int i = 0; i < totalCenters; ++i)
     {
-        allCenters.clear();
-        allCenters.resize(totalCenters);
-        
-        for (int i = 0; i < totalCenters; ++i)
+        std::vector<double> centerCoords(opts.dim);
+        for (int j = 0; j < opts.dim; ++j)
         {
-            std::vector<double> centerCoords(opts.dim);
-            for (int j = 0; j < opts.dim; ++j)
-            {
-                centerCoords[j] = recvBuffer[i * (opts.dim + 1) + j];
-            }
-            int centerRank = static_cast<int>(recvBuffer[i * (opts.dim + 1) + opts.dim]);
-            allCenters[i] = std::make_pair(centerCoords, centerRank);
+            centerCoords[j] = recvBuffer[i * (opts.dim + 1) + j];
         }
+        int centerRank = static_cast<int>(recvBuffer[i * (opts.dim + 1) + opts.dim]);
+        allCenters[i] = std::make_pair(centerCoords, centerRank);
     }
 }
 
-// Function to randomly reorder centers at processor 0
-void reorderCenters(std::vector<std::pair<std::vector<double>, int>> &centers, const Opts &opts)
+// Function to randomly reorder centers at all processors
+void reorderCenters(std::vector<std::vector<double>> &centers, 
+                   std::vector<std::pair<std::vector<double>, int>> &allCenters, 
+                   std::vector<int> &permutation,
+                   std::vector<int> &localPermutation,
+                   const Opts &opts)
 {
-    int rank;
+    int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (rank == 0)
-    {
-        // Use a seeded random number generator for reproducibility
-        std::mt19937 gen(opts.seed);
-        // Shuffle non-empty centers using std::shuffle instead of deprecated std::random_shuffle
-        std::shuffle(centers.begin(), centers.end(), gen);
+    // Generate the same random permutation on all nodes
+    std::mt19937 gen(opts.seed);
+    permutation.resize(allCenters.size());
+    std::iota(permutation.begin(), permutation.end(), 0);
+    std::shuffle(permutation.begin(), permutation.end(), gen);
+
+    // Get the number of centers this node has
+    int numLocalCenters = centers.size();
+    
+    // Gather the number of centers from all nodes
+    std::vector<int> centerCounts(size);
+    MPI_Allgather(&numLocalCenters, 1, MPI_INT, centerCounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    
+    // Calculate displacements
+    std::vector<int> displacements(size, 0);
+    for (int i = 1; i < size; ++i) {
+        displacements[i] = displacements[i-1] + centerCounts[i-1];
+    }
+    
+    // Keep only the permuted indices for this node's portion
+    localPermutation.clear();
+    localPermutation.reserve(numLocalCenters);
+    for (int i = 0; i < numLocalCenters; ++i) {
+        localPermutation.push_back(permutation[displacements[rank] + i]);
     }
 }
 

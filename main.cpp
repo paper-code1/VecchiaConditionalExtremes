@@ -248,9 +248,9 @@ int main(int argc, char **argv)
     std::vector<std::pair<std::vector<double>, int>> allCenters;
     std::vector<std::pair<std::vector<double>, int>> allCenters_test;
     // send the centers to the root processor and add the rank (label)
-    sendCentersOfGravityToRoot(centers, allCenters, opts);
+    AllGatherCenters(centers, allCenters, opts);
     if (opts.mode == "prediction" || opts.mode == "full"){
-        sendCentersOfGravityToRoot(centers_test, allCenters_test, opts);
+        AllGatherCenters(centers_test, allCenters_test, opts);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_send_centers_of_gravity = std::chrono::high_resolution_clock::now();
@@ -265,16 +265,19 @@ int main(int argc, char **argv)
         std::cout << "Reordering centers" << std::endl;
     }
     auto start_reorder_centers = std::chrono::high_resolution_clock::now();
-    reorderCenters(allCenters, opts);
-    // Broadcast reordered centers to all processors
-    int numCenters = allCenters.size();
-    int numCenters_test = allCenters_test.size();
-    MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    broadcastCenters(allCenters, numCenters, opts);
-    if (opts.mode == "prediction" || opts.mode == "full"){
-        MPI_Bcast(&numCenters_test, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        broadcastCenters(allCenters_test, numCenters_test, opts);
-    }
+    // Now you can use permutation and localPermutation here
+    std::vector<int> permutation;
+    std::vector<int> localPermutation;
+    reorderCenters(centers, allCenters, permutation, localPermutation, opts);
+    // // Broadcast reordered centers to all processors
+    // int numCenters = allCenters.size();
+    // int numCenters_test = allCenters_test.size();
+    // MPI_Bcast(&numCenters, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    // broadcastCenters(allCenters, numCenters, opts);
+    // if (opts.mode == "prediction" || opts.mode == "full"){
+    //     MPI_Bcast(&numCenters_test, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    //     broadcastCenters(allCenters_test, numCenters_test, opts);
+    // }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_reorder_centers = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration_reorder_centers = end_reorder_centers - start_reorder_centers;
@@ -286,7 +289,7 @@ int main(int argc, char **argv)
     // 4. NN searching
     // 4.1 Create block information
     auto start_create_block_info = std::chrono::high_resolution_clock::now();
-    std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, opts);
+    std::vector<BlockInfo> localBlocks = createBlockInfo(finerPartitions, centers, allCenters, permutation, localPermutation, opts);
     std::vector<BlockInfo> localBlocks_test;
     if (opts.mode == "prediction" || opts.mode == "full"){
         // testset does not need to consider order of blocks
@@ -306,11 +309,11 @@ int main(int argc, char **argv)
     std::vector<BlockInfo> receivedBlocks;
     std::vector<BlockInfo> receivedBlocks_test;
     if (opts.mode == "estimation" || opts.mode == "full"){
-        receivedBlocks = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, opts, false);
+        receivedBlocks = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, permutation, localPermutation, opts, false);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     if (opts.mode == "prediction" || opts.mode == "full"){
-        receivedBlocks_test = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, opts, true);
+        receivedBlocks_test = processAndSendBlocks(localBlocks, allCenters, allCenters_test, opts.distance_threshold_coarse, permutation, localPermutation, opts, true);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto end_block_sending = std::chrono::high_resolution_clock::now();

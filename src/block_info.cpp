@@ -43,6 +43,8 @@ std::vector<BlockInfo> createBlockInfo_test(const std::vector<std::vector<PointM
 std::vector<BlockInfo> createBlockInfo(const std::vector<std::vector<PointMetadata>> &finerPartitions,
                                        const std::vector<std::vector<double>> &localCenters,
                                        const std::vector<std::pair<std::vector<double>, int>> &allCenters,
+                                       const std::vector<int> &permutation,
+                                       const std::vector<int> &localPermutation,
                                        const Opts &opts)
 {
     int rank, size;
@@ -58,12 +60,14 @@ std::vector<BlockInfo> createBlockInfo(const std::vector<std::vector<PointMetada
     {
         const auto &localCenter = localCenters[i];
 
-        // Find the global order of the current local center among the all centers
-        auto it = std::find_if(allCenters.begin(), allCenters.end(), 
-                              [&localCenter](const std::pair<std::vector<double>, int>& centerPair) {
-                                  return centerPair.first == localCenter;
-                              });
-        int globalOrder = (it != allCenters.end()) ? std::distance(allCenters.begin(), it) : -1; // Use -1 if not found
+        // // Find the global order of the current local center among the all centers
+        // auto it = std::find_if(allCenters.begin(), allCenters.end(), 
+        //                       [&localCenter](const std::pair<std::vector<double>, int>& centerPair) {
+        //                           return centerPair.first == localCenter;
+        //                       });
+        // int globalOrder = (it != allCenters.end()) ? std::distance(allCenters.begin(), it) : -1; // Use -1 if not found
+
+        int globalOrder = permutation[localPermutation[i]];
         
         // // only used for debugging
         // // Since we're in a parallel region, use a critical section for error handling

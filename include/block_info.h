@@ -39,6 +39,8 @@ std::vector<BlockInfo> createBlockInfo(
     const std::vector<std::vector<PointMetadata>> &finerPartitions,
     const std::vector<std::vector<double>> &localCenters,
     const std::vector<std::pair<std::vector<double>, int>> &allCenters,
+    const std::vector<int> &permutation,
+    const std::vector<int> &localPermutation,
     const Opts& opts);
 
 // Function to create block information for each processor
