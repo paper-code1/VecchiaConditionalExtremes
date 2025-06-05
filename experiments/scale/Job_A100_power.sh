@@ -32,9 +32,9 @@ monitor_resources() {
     vmstat -w 1 | awk '{now=strftime("%Y-%m-%d %H:%M:%S "); print now $0}' > "./log/A100_power/monitoring/cpu_mem_${exp_id}.log" &
     VMSTAT_PID=$!
     
-    # Monitor GPU stats every 5 seconds
+    # Monitor GPU stats every 1 seconds
     nvidia-smi --query-gpu=timestamp,index,power.draw,utilization.gpu,memory.used,memory.total,temperature.gpu \
-        --format=csv -l 3 > "./log/A100_power/monitoring/gpu_${exp_id}.log" &
+        --format=csv -l 0.1 > "./log/A100_power/monitoring/gpu_${exp_id}.log" &
     GPU_PID=$!
 }
 
