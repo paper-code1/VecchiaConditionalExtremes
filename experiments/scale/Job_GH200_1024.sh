@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH -N 4
+#SBATCH -N 256
 #SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=72
-#SBATCH -J scaling_GH200_16
-#SBATCH -o scaling_GH200_16.%J.out
-#SBATCH -e scaling_GH200_16.%J.err
+#SBATCH -J scaling_GH200_1024
+#SBATCH -o scaling_GH200_1024.%J.out
+#SBATCH -e scaling_GH200_1024.%J.err
 #SBATCH --time=3:30:00
 #SBATCH -A jureap137
 
@@ -12,8 +12,8 @@ N_base_strong=(5000000 5000000 5000000) # larger problem BSV 100/400 GH200
 M_ests=(100 200 400)
 nn_multipliers=(300 300 500)
 N_bs=(100 100 100)
-num_GPUs=16
-num_runs=5
+num_GPUs=1024
+num_runs=3
 DIM=10
 theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
@@ -45,7 +45,7 @@ for index in {0..2}; do
             --kernel_type Matern72 \
             --seed $i \
             --nn_multiplier $nn_multiplier_weak \
-            --log_append GH200_scaling_16\
+            --log_append GH200_scaling_1024\
             --omp_num_threads 72 \
             --print=false
     done
@@ -76,11 +76,11 @@ for index in {0..2}; do
             --kernel_type Matern72 \
             --seed $i \
             --nn_multiplier $nn_multiplier_strong \
-            --log_append GH200_scaling_16\
+            --log_append GH200_scaling_1024\
             --omp_num_threads 72 \
             --print=false
     done
 done
 
 mkdir -p ./log/GH200_scaling
-mv ./log/*_GH200_scaling_16.csv ./log/GH200_scaling/
+mv ./log/*_GH200_scaling_1024.csv ./log/GH200_scaling/

@@ -19,7 +19,7 @@ theta_init=1.0,0.001
 distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
-for index in {0..1}; do
+for index in {0..2}; do
     # Calculate N_base_weak as N_base_strong[0] * (2^(0.6))
     N_base_weak=$((N_base_strong[$index]*num_GPUs))
     N_bs_weak=${N_bs[0]}
@@ -51,7 +51,7 @@ for index in {0..1}; do
     done
 done
 
-for index in {0..1}; do
+for index in {0..2}; do
     N_base_strong=$((N_base_strong[$index]))
     N_bs_strong=${N_bs[0]}
     N_bc_strong=$((N_base_strong/N_bs_strong))

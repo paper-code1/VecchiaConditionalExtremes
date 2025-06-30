@@ -19,7 +19,7 @@ distance_scale=0.05,0.01,0.05,5.0,5.0,5.0,5.0,5.0,5.0,5.0
 distance_scale_init=$distance_scale
 
 # base scaling
-for index in {0..1}; do
+for index in {0..2}; do
     # Scaled block Vecchia
     N=${N_base_strong[$index]}
     m_bv=${M_ests[$index]}
