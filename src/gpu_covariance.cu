@@ -608,3 +608,94 @@ void compute_covariance_vbatched(double** d_X1, const int* ldx1, int incx1, int 
             break;
     }
 }
+
+// Batched matrix-matrix addition kernel
+__global__ void batched_matrix_add_kernel(
+    double** d_A_array, const int* lda_A, const int* ldda_A,
+    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double alpha, int batchCount) {
+    
+    int batch_id = blockIdx.z;
+    if (batch_id >= batchCount) return;
+    
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    int m = lda_A[batch_id];
+    int n = lda_B[batch_id];
+    int ldda_A_matrix = ldda_A[batch_id];
+    int ldda_B_matrix = ldda_B[batch_id];
+    
+    double* d_A = d_A_array[batch_id];
+    double* d_B = d_B_array[batch_id];
+    
+    if (i < m && j < n) {
+        d_A[i + j * ldda_A_matrix] += alpha * d_B[i + j * ldda_B_matrix];
+    }
+}
+
+// Batched matrix-vector addition kernel
+__global__ void batched_vector_add_kernel(
+    double** d_A_array, const int* lda_A, const int* ldda_A,
+    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double alpha, int batchCount) {
+    
+    int batch_id = blockIdx.x;
+    if (batch_id >= batchCount) return;
+    
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    int m = lda_A[batch_id];
+    int ldda_A_matrix = ldda_A[batch_id];
+    int ldda_B_matrix = ldda_B[batch_id];
+    
+    double* d_A = d_A_array[batch_id];
+    double* d_B = d_B_array[batch_id];
+    
+    if (i < m) {
+        d_A[i] += alpha * d_B[i];
+    }
+}
+
+// Batched matrix-matrix addition wrapper function
+void batched_matrix_add(
+    double** d_A_array, const int* lda_A, const int* ldda_A,
+    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double alpha, int batchCount, cudaStream_t stream) {
+    
+    // Find max dimensions for grid sizing
+    thrust::device_ptr<const int> d_lda_A_ptr(lda_A);
+    thrust::device_ptr<const int> d_lda_B_ptr(lda_B);
+    
+    int max_m = thrust::reduce(thrust::cuda::par.on(stream), d_lda_A_ptr, d_lda_A_ptr + batchCount, 0, thrust::maximum<int>());
+    int max_n = thrust::reduce(thrust::cuda::par.on(stream), d_lda_B_ptr, d_lda_B_ptr + batchCount, 0, thrust::maximum<int>());
+    
+    dim3 blockDim(THREAD_X, THREAD_Y, 1);
+    dim3 gridDim((max_m + blockDim.x - 1) / blockDim.x, 
+                 (max_n + blockDim.y - 1) / blockDim.y, 
+                 batchCount);
+    
+    batched_matrix_add_kernel<<<gridDim, blockDim, 0, stream>>>(
+        d_A_array, lda_A, ldda_A,
+        d_B_array, lda_B, ldda_B,
+        alpha, batchCount);
+}
+
+// Batched matrix-vector addition wrapper function
+void batched_vector_add(
+    double** d_A_array, const int* lda_A, const int* ldda_A,
+    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double alpha, int batchCount, cudaStream_t stream) {
+    
+    // Find max dimension for grid sizing
+    thrust::device_ptr<const int> d_lda_A_ptr(lda_A);
+    int max_m = thrust::reduce(thrust::cuda::par.on(stream), d_lda_A_ptr, d_lda_A_ptr + batchCount, 0, thrust::maximum<int>());
+    
+    dim3 blockDim(1, THREADS_PER_BLOCK, 1);
+    dim3 gridDim(batchCount, (max_m + blockDim.y - 1) / blockDim.y, 1);
+    
+    batched_vector_add_kernel<<<gridDim, blockDim, 0, stream>>>(
+        d_A_array, lda_A, ldda_A,
+        d_B_array, lda_B, ldda_B,
+        alpha, batchCount);
+}
