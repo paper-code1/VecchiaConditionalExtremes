@@ -157,6 +157,16 @@ int main(int argc, char **argv)
         if (opts.mode == "prediction" || opts.mode == "full"){
             localPoints_test = generateRandomPoints(opts.numPointsPerProcess_test, opts);
         }
+        // print the first 10 points
+        if (rank == 0){
+            std::cout << "First 10 points: " << std::endl;
+            for (int i = 0; i < 10; i++){
+                for (int j = 0; j < opts.dim; ++j){
+                    std::cout << localPoints[i].coordinates[j] << ", ";
+                }
+                std::cout << localPoints[i].observation << std::endl;
+            }
+        }
         // std::cout << "Sampling borehole function" << std::endl;
         // opts.dim = 8;
         // std::pair<std::vector<PointMetadata>, std::pair<double, double>> result = Borehole::sample_borehole(opts.numPointsPerProcess, rank, true);

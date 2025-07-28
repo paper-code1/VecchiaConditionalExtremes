@@ -646,8 +646,6 @@ __global__ void batched_vector_add_kernel(
     int i = blockIdx.y * blockDim.y + threadIdx.y;
     
     int m = lda[batch_id];
-    int ldda_A_matrix = ldda_A[batch_id];
-    int ldda_B_matrix = ldda_B[batch_id];
     
     double* d_A = d_A_array[batch_id];
     double* d_B = d_B_array[batch_id];
