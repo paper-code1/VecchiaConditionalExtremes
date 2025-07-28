@@ -80,22 +80,22 @@ void generate_normal(double *data, int n, double mean, double stddev, unsigned l
 
 // Batched matrix addition kernels
 __global__ void batched_matrix_add_kernel(
-    double** d_A_array, const int* lda_A, const int* ldda_A,
-    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double** d_A_array, const int* ldda_A,
+    double** d_B_array, const int* lda, const int* ldda_B,
     double alpha, int batchCount);
 
 __global__ void batched_vector_add_kernel(
-    double** d_A_array, const int* lda_A, const int* ldda_A,
-    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double** d_A_array, const int* ldda_A,
+    double** d_B_array, const int* lda, const int* ldda_B,
     double alpha, int batchCount);
 
 void batched_matrix_add(
-    double** d_A_array, const int* lda_A, const int* ldda_A,
+    double** d_A_array, const int* ldda_A,
     double** d_B_array, const int* lda_B, const int* ldda_B,
     double alpha, int batchCount, cudaStream_t stream);
 
 void batched_vector_add(
-    double** d_A_array, const int* lda_A, const int* ldda_A,
+    double** d_A_array, const int* ldda_A,
     double** d_B_array, const int* lda_B, const int* ldda_B,
     double alpha, int batchCount, cudaStream_t stream);
 

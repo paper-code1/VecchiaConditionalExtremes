@@ -514,13 +514,13 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     // }
     // compute conditional variance: h_cov_array[i] -= h_cov_correction_array[i]
     batched_matrix_add(
-        gpuData.h_cov_array, gpuData.lda_locs.data(), gpuData.ldda_cov.data(),
+        gpuData.h_cov_array, gpuData.ldda_cov.data(),
         gpuData.h_cov_correction_array, gpuData.lda_locs.data(), gpuData.ldda_locs.data(),
         -1.0, batchCount, stream);
     
     // compute conditional mean: h_observations_copy_array[i] -= h_mu_correction_array[i]
     batched_vector_add(
-        gpuData.h_observations_copy_array, gpuData.lda_locs.data(), gpuData.ldda_locs.data(),
+        gpuData.h_observations_copy_array, gpuData.ldda_locs.data(),
         gpuData.h_mu_correction_array, gpuData.lda_locs.data(), gpuData.ldda_locs.data(),
         -1.0, batchCount, stream);
     
