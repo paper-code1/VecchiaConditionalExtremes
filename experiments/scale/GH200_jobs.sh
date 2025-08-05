@@ -15,6 +15,10 @@ sbatch experiments/scale/Job_GH200_8.sh # 3.5 hours
 sbatch experiments/scale/Job_GH200_16.sh # 3.5 hours
 sbatch experiments/scale/Job_GH200_32.sh # 3.5 hours
 sbatch experiments/scale/Job_GH200_64.sh # 3.5 hours
+sbatch experiments/scale/Job_GH200_128.sh # 3.5 hours
+sbatch experiments/scale/Job_GH200_256.sh # 3.5 hours
+sbatch experiments/scale/Job_GH200_512.sh # 3.5 hours
+# sbatch experiments/scale/Job_GH200_1024.sh # 3.5 hours (too large, optional)
 
 # sbatch experiments/scale/Job_GH200_power.sh # 1 hour
 sbatch experiments/scale/Job_GH200_power_jpwr.sh # 1 hour

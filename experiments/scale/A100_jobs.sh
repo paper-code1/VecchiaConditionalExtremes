@@ -15,6 +15,9 @@ sbatch experiments/scale/Job_A100_8.sh # 2 hours
 sbatch experiments/scale/Job_A100_16.sh # 2 hours
 sbatch experiments/scale/Job_A100_32.sh # 2 hours
 sbatch experiments/scale/Job_A100_64.sh # 2 hours
+sbatch experiments/scale/Job_A100_128.sh # 2 hours
+sbatch experiments/scale/Job_A100_256.sh # 2 hours
+sbatch experiments/scale/Job_A100_512.sh # 2 hours
 
 sbatch experiments/scale/Job_A100_power.sh # 1 hour 
 
