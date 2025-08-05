@@ -12,7 +12,7 @@
 
 N_base_strong=(2000000 2000000 2000000) # larger problem BSV 100/400 A100
 M_ests=(100 200 400)
-nn_multipliers=(300 300 500)
+nn_multipliers=(300 300 300)
 N_bs=(100 100 100)
 num_GPUs=16
 num_runs=3

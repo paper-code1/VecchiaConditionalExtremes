@@ -7,12 +7,12 @@
 #SBATCH --output=A100_scaling_128.%j
 #SBATCH --error=A100_scaling_128-err.%j
 #SBATCH --time=2:00:00 
-#SBATCH --partition=dc-gpu-large
+#SBATCH --partition=dc-gpu
 #SBATCH --gres=gpu:4
 
 N_base_strong=(2000000 2000000 2000000) # larger problem BSV 100/400 A100
 M_ests=(100 200 400)
-nn_multipliers=(300 300 500)
+nn_multipliers=(300 300 300)
 N_bs=(100 100 100)
 num_GPUs=128
 num_runs=3
