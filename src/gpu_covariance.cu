@@ -661,6 +661,8 @@ void batched_matrix_add(
     double** d_B_array, const int* lda, const int* ldda_B,
     double alpha, int batchCount, cudaStream_t stream) {
     
+    if (batchCount <= 0) return;
+    
     // Find max dimensions for grid sizing
     thrust::device_ptr<const int> d_lda_ptr(lda);
     
@@ -688,6 +690,8 @@ void batched_vector_add(
     double** d_A_array, const int* ldda_A,
     double** d_B_array, const int* lda, const int* ldda_B,
     double alpha, int batchCount, cudaStream_t stream) {
+    
+    if (batchCount <= 0) return;
     
     // Find max dimension for grid sizing
     thrust::device_ptr<const int> d_lda_ptr(lda);

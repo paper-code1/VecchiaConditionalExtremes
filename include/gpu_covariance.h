@@ -91,12 +91,12 @@ __global__ void batched_vector_add_kernel(
 
 void batched_matrix_add(
     double** d_A_array, const int* ldda_A,
-    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double** d_B_array, const int* lda, const int* ldda_B,
     double alpha, int batchCount, cudaStream_t stream);
 
 void batched_vector_add(
     double** d_A_array, const int* ldda_A,
-    double** d_B_array, const int* lda_B, const int* ldda_B,
+    double** d_B_array, const int* lda, const int* ldda_B,
     double alpha, int batchCount, cudaStream_t stream);
 
 #endif // GPU_COVARIANCE_H

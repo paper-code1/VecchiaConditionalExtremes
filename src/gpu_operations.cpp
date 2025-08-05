@@ -513,17 +513,19 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
     //     // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_mu_correction_array[i], gpuData.ldda_locs[i], queue);
     // }
     // compute conditional variance: h_cov_array[i] -= h_cov_correction_array[i]
+    checkCudaError(cudaGetLastError()); // Clear any previous errors 
     batched_matrix_add(
-        gpuData.h_cov_array, gpuData.ldda_cov.data(),
-        gpuData.h_cov_correction_array, gpuData.lda_locs.data(), gpuData.ldda_locs.data(),
+        gpuData.d_cov_array, gpuData.d_ldda_cov,
+        gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
         -1.0, batchCount, stream);
+    checkCudaError(cudaGetLastError()); // Check for errors after matrix add
     
     // compute conditional mean: h_observations_copy_array[i] -= h_mu_correction_array[i]
     batched_vector_add(
-        gpuData.h_observations_copy_array, gpuData.ldda_locs.data(),
-        gpuData.h_mu_correction_array, gpuData.lda_locs.data(), gpuData.ldda_locs.data(),
-        -1.0, batchCount, stream);
-    
+        gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
+        gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
+        -1.0, batchCount, stream); 
+    checkCudaError(cudaGetLastError()); // Check for errors after vector add
     checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
