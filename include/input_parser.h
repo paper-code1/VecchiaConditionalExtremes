@@ -20,12 +20,12 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
 
     cxxopts::Options options(argv[0], "Block Vecchia approximation");
     options.add_options()
-    ("num_total_points", "Total number of points", cxxopts::value<int>()->default_value("20000"))
-    ("num_total_blocks", "Total number of blocks", cxxopts::value<int>()->default_value("1000"))
+    ("num_total_points", "Total number of points", cxxopts::value<long long>()->default_value("20000"))
+    ("num_total_blocks", "Total number of blocks", cxxopts::value<long long >()->default_value("1000"))
     ("print", "Print additional information", cxxopts::value<bool>()->default_value("true")->implicit_value("true"))
     ("m", "Special rule for the first 100 blocks", cxxopts::value<int>()->default_value("200"))
-    ("num_total_points_test", "Total number of points for testing", cxxopts::value<int>()->default_value("2000"))
-    ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<int>()->default_value("100"))
+    ("num_total_points_test", "Total number of points for testing", cxxopts::value<long long>()->default_value("2000"))
+    ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<long long>()->default_value("100"))
     ("m_test", "Special rule for the first 100 blocks for testing", cxxopts::value<int>()->default_value("120"))
     ("distance_threshold_coarse", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.2"))
     ("distance_threshold_finer", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.05"))
@@ -71,13 +71,13 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
         }
         return false;
     }
-    opts.numPointsTotal = result["num_total_points"].as<int>();
+    opts.numPointsTotal = result["num_total_points"].as<long long>();
     opts.numPointsPerProcess = opts.numPointsTotal / size + (rank < opts.numPointsTotal % size);
-    opts.numBlocksTotal = result["num_total_blocks"].as<int>();
+    opts.numBlocksTotal = result["num_total_blocks"].as<long long>();
     opts.numBlocksPerProcess = opts.numBlocksTotal / size + (rank < opts.numBlocksTotal % size);
-    opts.numPointsTotal_test = result["num_total_points_test"].as<int>();
+    opts.numPointsTotal_test = result["num_total_points_test"].as<long long>();
     opts.numPointsPerProcess_test = opts.numPointsTotal_test / size + (rank < opts.numPointsTotal_test % size);
-    opts.numBlocksTotal_test = result["num_total_blocks_test"].as<int>();
+    opts.numBlocksTotal_test = result["num_total_blocks_test"].as<long long>();
     opts.numBlocksPerProcess_test = opts.numBlocksTotal_test / size + (rank < opts.numBlocksTotal_test % size);
     opts.print = result["print"].as<bool>();
     opts.m = result["m"].as<int>();

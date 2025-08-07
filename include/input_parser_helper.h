@@ -28,14 +28,14 @@ inline KernelType parse_kernel_type(const std::string &kernel_type_str) {
 // Structure to store command line options
 struct Opts
 {
-    int numPointsPerProcess;
-    int numPointsTotal;
-    int numBlocksPerProcess;
-    int numBlocksTotal;
-    int numPointsPerProcess_test;
-    int numPointsTotal_test;
-    int numBlocksPerProcess_test;
-    int numBlocksTotal_test;
+    long long numPointsPerProcess;
+    long long numPointsTotal;
+    long long numBlocksPerProcess;
+    long long numBlocksTotal;
+    long long numPointsPerProcess_test;
+    long long numPointsTotal_test;
+    long long numBlocksPerProcess_test;
+    long long numBlocksTotal_test;
     int m; // the number of nearest neighbor
     int m_test; // the number of nearest neighbor for testing
     bool print;
