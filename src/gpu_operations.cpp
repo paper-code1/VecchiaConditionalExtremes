@@ -9,7 +9,7 @@
 #include "magma_dprint_gpu.h"
 
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
-GpuData __inline__ copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
+GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -323,7 +323,7 @@ GpuData __inline__ copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> 
 }
 
 // Function to perform computation on the GPU
-double __inline__ performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, Opts &opts)
+double performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
