@@ -10,7 +10,9 @@ void saveTimeAndGflops(
     double duration_reorder_centers, 
     double duration_create_block_info, double duration_block_sending, 
     double duration_nn_searching, double duration_gpu_copy, 
-    double duration_computation, double duration_cleanup_gpu,
+    double duration_computation, 
+    double duration_gpu_total, // GPU total time is less than computation time, excluding the warmup time
+    double duration_cleanup_gpu,
     double duration_total, 
     double total_gflops, int numPointsPerProcess, int numPointsTotal, 
     int numBlocksPerProcess, int numBlocksTotal, int m, int seed, 
@@ -29,9 +31,9 @@ void saveTimeAndGflops(
     std::ofstream file(logFileName, std::ios::app);
     // save the mspe in 16 digits after the decimal point
     if (file.tellp() == 0) {
-        file << "RAC_partitioning,centers_of_gravity_calculation,send_centers_of_gravity,reorder_centers,create_block_info,block_sending,nn_searching,gpu_copy,computation,cleanup_gpu,total,total_gflops,numPointsPerProcess,numPointsTotal,numBlocksPerProcess,numBlocksTotal,m,seed,mspe,rmspe,ci_coverage,optimized_log_likelihood,iters" <<std::endl;
+        file << "RAC_partitioning,centers_of_gravity_calculation,send_centers_of_gravity,reorder_centers,create_block_info,block_sending,nn_searching,gpu_copy,computation,gpu_total,cleanup_gpu,total,total_gflops,numPointsPerProcess,numPointsTotal,numBlocksPerProcess,numBlocksTotal,m,seed,mspe,rmspe,ci_coverage,optimized_log_likelihood,iters" <<std::endl;
     }
-    file << std::setprecision(15) << duration_RAC_partitioning << "," << duration_centers_of_gravity << "," << duration_send_centers_of_gravity << "," << duration_reorder_centers << "," << duration_create_block_info << "," << duration_block_sending << "," << duration_nn_searching << "," << duration_gpu_copy << "," << duration_computation << "," << duration_cleanup_gpu << "," << duration_total << "," << total_gflops << "," << numPointsPerProcess << "," << numPointsTotal << "," << numBlocksPerProcess << "," << numBlocksTotal << "," << m << "," << seed << "," << mspe << "," << rmspe << "," << ci_coverage << "," << optimized_log_likelihood << "," << opts.current_iter << std::endl;
+    file << std::setprecision(15) << duration_RAC_partitioning << "," << duration_centers_of_gravity << "," << duration_send_centers_of_gravity << "," << duration_reorder_centers << "," << duration_create_block_info << "," << duration_block_sending << "," << duration_nn_searching << "," << duration_gpu_copy << "," << duration_computation << "," << duration_gpu_total << "," << duration_cleanup_gpu << "," << duration_total << "," << total_gflops << "," << numPointsPerProcess << "," << numPointsTotal << "," << numBlocksPerProcess << "," << numBlocksTotal << "," << m << "," << seed << "," << mspe << "," << rmspe << "," << ci_coverage << "," << optimized_log_likelihood << "," << opts.current_iter << std::endl;
     file.close();
 
     // save the theta to a file

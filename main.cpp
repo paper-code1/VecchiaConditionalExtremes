@@ -9,6 +9,8 @@
 #include <fstream>
 #include <magma_v2.h>
 #include <omp.h>
+#include <cuda_runtime.h>
+#include "error_checking.h"
 #include "input_parser.h"
 #include "block_info.h"
 #include "random_points.h"
@@ -35,9 +37,34 @@ double objective_function(const std::vector<double> &x, std::vector<double> &gra
     
     // Broadcast theta values from rank 0 to all processes
     MPI_Bcast(const_cast<double*>(x.data()), x.size(), MPI_DOUBLE, 0, opt_data->comm);
-    
+
+    // Warmup once if perf == 1
+    static bool warmed_up = false;
+    if (opts->perf == 1 && !warmed_up) {
+        MPI_Barrier(opt_data->comm);
+        performComputationOnGPU(*gpuData, x, *opts);
+        MPI_Barrier(opt_data->comm);
+        warmed_up = true;
+        if (opt_data->rank == 0 && opts->print) {
+            std::cout << "Warmup completed" << std::endl;
+        }
+    }
+
     // Negate the log-likelihood because NLopt minimizes by default
+    cudaEvent_t startEv, stopEv;
+    checkCudaError(cudaEventCreate(&startEv));
+    checkCudaError(cudaEventCreate(&stopEv));
+    checkCudaError(cudaEventRecord(startEv, opts->stream));
+
     double result = -performComputationOnGPU(*gpuData, x, *opts);
+
+    checkCudaError(cudaEventRecord(stopEv, opts->stream));
+    checkCudaError(cudaEventSynchronize(stopEv));
+    float ms = 0.0f;
+    checkCudaError(cudaEventElapsedTime(&ms, startEv, stopEv));
+    opts->time_gpu_total += ms / 1000.0f; // seconds
+    checkCudaError(cudaEventDestroy(startEv));
+    checkCudaError(cudaEventDestroy(stopEv));
 
     opts->current_iter++;
     // Print optimization info
@@ -78,6 +105,7 @@ int main(int argc, char **argv)
     opts.time_covgen = 0;
     opts.time_cholesky_trsm_gemm = 0;
     opts.time_cholesky_trsm = 0;
+    opts.time_gpu_total = 0;
 
     // Use the parsed options
     if (rank == 0) {
@@ -552,6 +580,7 @@ int main(int argc, char **argv)
             max_duration_create_block_info, max_duration_block_sending, 
             max_duration_nn_searching, 
             max_duration_gpu_copy, max_duration_computation,
+            opts.time_gpu_total,
             max_duration_cleanup_gpu,
             max_duration_total,
             total_gflops, 

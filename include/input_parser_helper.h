@@ -70,6 +70,7 @@ struct Opts
     float time_covgen;
     float time_cholesky_trsm_gemm;
     float time_cholesky_trsm;
+    float time_gpu_total;
 
     // paths
     std::string train_metadata_path;
@@ -78,6 +79,8 @@ struct Opts
     int omp_num_threads;
     cudaStream_t stream;
     magma_queue_t queue;
+    // performance/testing controls
+    int perf;
 };
 
 #endif

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <mpi.h>
 #include <magma_v2.h>
+#include <sys/cdefs.h>
 #include "gpu_operations.h"
 #include "gpu_covariance.h"
 #include "flops.h"
@@ -8,7 +9,7 @@
 #include "magma_dprint_gpu.h"
 
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
-GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
+GpuData __inline__ copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -322,7 +323,7 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
 }
 
 // Function to perform computation on the GPU
-double performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, Opts &opts)
+double __inline__ performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);

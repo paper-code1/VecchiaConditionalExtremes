@@ -51,6 +51,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("omp_num_threads", "Number of threads for OpenMP", cxxopts::value<int>()->default_value("20"))
     ("log_append", "Append to the log file", cxxopts::value<std::string>()->default_value(""))
     ("nn_multiplier", "Number of nearest neighbors multiplier", cxxopts::value<int>()->default_value("400"))
+    ("perf", "Enable performance warmup (0/1)", cxxopts::value<int>()->default_value("1"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -189,6 +190,8 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.time_cholesky_trsm_gemm = 0;
     opts.time_cholesky_trsm = 0;
     opts.time_covgen = 0;
+    opts.time_gpu_total = 0;
+    opts.perf = result["perf"].as<int>();
     return true;
 }
 
