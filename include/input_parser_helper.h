@@ -15,6 +15,11 @@ enum class KernelType {
     Matern72
 };
 
+enum class PrecisionType {
+    Double,
+    Float
+};
+
 inline KernelType parse_kernel_type(const std::string &kernel_type_str) {
     if (kernel_type_str == "PowerExponential") return KernelType::PowerExponential;
     if (kernel_type_str == "Matern12") return KernelType::Matern12;
@@ -65,6 +70,7 @@ struct Opts
     std::vector<double> distance_scale_init;
     KernelType kernel_type;
     int range_offset;
+    PrecisionType precision;
 
     // timing
     float time_covgen;

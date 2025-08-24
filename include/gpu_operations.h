@@ -7,25 +7,26 @@
 #include <magma_v2.h>
 #include "block_info.h"
 #include "input_parser.h"
-// Define the GpuData structure to store GPU memory pointers and leading dimensions
-struct GpuData
+// Define a templated GpuData structure to store GPU memory pointers and leading dimensions
+template <typename Real>
+struct GpuDataT
 {
     // magma operations
     magma_int_t *dinfo_magma;
     // locations 
-    double **h_locs_array;
-    double **h_locs_neighbors_array;
+    Real **h_locs_array;
+    Real **h_locs_neighbors_array;
     // observations
-    double **h_observations_array;
-    double **h_observations_neighbors_array;
+    Real **h_observations_array;
+    Real **h_observations_neighbors_array;
     // covariance matrix, used to store the pointer of contiguous memory
-    double **h_cov_array;
-    double **h_cross_cov_array;
-    double **h_conditioning_cov_array;
-    double **h_observations_neighbors_copy_array;
-    double **h_observations_copy_array;
-    double **h_mu_correction_array;
-    double **h_cov_correction_array;
+    Real **h_cov_array;
+    Real **h_cross_cov_array;
+    Real **h_conditioning_cov_array;
+    Real **h_observations_neighbors_copy_array;
+    Real **h_observations_copy_array;
+    Real **h_mu_correction_array;
+    Real **h_cov_correction_array;
     // leading dimensions for GPU points (varied)
     std::vector<int> ldda_locs;      // Leading dimensions for GPU points (varied)
     std::vector<int> ldda_neighbors;   // Leading dimension for GPU nearest neighbors (varied)
@@ -50,44 +51,51 @@ struct GpuData
     int total_locs_num_device; // number of points (including the padding)
     int total_locs_neighbors_num_device; // number of nearest neighbors (including the padding)
     // contiguous memory for GPU points
-    // double *d_locs_device;           // Contiguous memory for locations
-    // double *d_locs_nearestNeighbors_device; // Contiguous memory for locations of nearest neighbors
+    // Real *d_locs_device;           // Contiguous memory for locations
+    // Real *d_locs_nearestNeighbors_device; // Contiguous memory for locations of nearest neighbors
     // only for 2D points (testing the coalesced memory access)
-    double *d_locs_device; // Contiguous memory for locations
-    double *d_locs_neighbors_device; // Contiguous memory for locations 
-    double *d_observations_device;           // Contiguous memory for observations points
-    double *d_observations_neighbors_device; // Contiguous memory for observations nearest neighbors
-    double *d_cov_device;           // Contiguous memory for covariance matrix
-    double *d_cross_cov_device;           // Contiguous memory for cross covariance matrix
-    double *d_conditioning_cov_device;           // Contiguous memory for conditioning covariance matrix
-    double *d_observations_neighbors_copy_device;
-    double *d_observations_copy_device;
-    double *d_mu_correction_device;
-    double *d_cov_correction_device;
-    double *d_range_device;
+    Real *d_locs_device; // Contiguous memory for locations
+    Real *d_locs_neighbors_device; // Contiguous memory for locations 
+    Real *d_observations_device;           // Contiguous memory for observations points
+    Real *d_observations_neighbors_device; // Contiguous memory for observations nearest neighbors
+    Real *d_cov_device;           // Contiguous memory for covariance matrix
+    Real *d_cross_cov_device;           // Contiguous memory for cross covariance matrix
+    Real *d_conditioning_cov_device;           // Contiguous memory for conditioning covariance matrix
+    Real *d_observations_neighbors_copy_device;
+    Real *d_observations_copy_device;
+    Real *d_mu_correction_device;
+    Real *d_cov_correction_device;
+    Real *d_range_device;
     
     // pointers for matrix and vectors 
-    double **d_locs_array;
-    double **d_locs_neighbors_array;
-    double **d_observations_points_array;
-    double **d_observations_neighbors_array;
-    double **d_cov_array;
-    double **d_cross_cov_array;
-    double **d_conditioning_cov_array;
-    double **d_observations_neighbors_copy_array;
-    double **d_observations_copy_array; 
-    double **d_mu_correction_array;
-    double **d_cov_correction_array;
+    Real **d_locs_array;
+    Real **d_locs_neighbors_array;
+    Real **d_observations_points_array;
+    Real **d_observations_neighbors_array;
+    Real **d_cov_array;
+    Real **d_cross_cov_array;
+    Real **d_conditioning_cov_array;
+    Real **d_observations_neighbors_copy_array;
+    Real **d_observations_copy_array; 
+    Real **d_mu_correction_array;
+    Real **d_cov_correction_array;
 };
 
+using GpuData = GpuDataT<double>;
+using GpuDataF = GpuDataT<float>;
+
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
-GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos);
+template <typename Real>
+GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos);
 
 // Function to perform computation on the GPU
-double performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, Opts &opts);
+template <typename Real>
+double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<double> &theta, Opts &opts);
 // Function to clean up GPU memory
-void cleanupGpuMemory(GpuData &gpuData);
+template <typename Real>
+void cleanupGpuMemory(GpuDataT<Real> &gpuData);
 
-double gflopsTotal(const GpuData &gpuData, const Opts &opts);
+template <typename Real>
+double gflopsTotal(const GpuDataT<Real> &gpuData, const Opts &opts);
 
 #endif // GPU_OPERATIONS_H

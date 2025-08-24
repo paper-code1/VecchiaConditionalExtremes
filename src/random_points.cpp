@@ -143,7 +143,9 @@ std::vector<int> randomClustering(const std::vector<PointMetadata> &metadata, in
     // 1.5 here will make the random seed not working, because the 
     // the parallelization here will somehow terminate feed a cluster
     // with exceeding the size limit
-    float alpha_expansion = is_test ? 99999999. : 1.5;
+    // float alpha_expansion = is_test ? 99999999. : 1.5;
+    
+    float alpha_expansion = is_test ? 99999999. : 15000;
     
     // Initialize random number generator
     std::mt19937 gen(seed);

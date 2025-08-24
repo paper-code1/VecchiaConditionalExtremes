@@ -8,8 +8,88 @@
 #include "error_checking.h"
 #include "magma_dprint_gpu.h"
 
+template <typename Real>
+struct MagmaOps;
+
+template <>
+struct MagmaOps<double> {
+    static inline void potrf_neighbors(magma_uplo_t uplo, magma_int_t* d_n, double** d_A_array, magma_int_t* d_ldda, magma_int_t* dinfo, magma_int_t batchCount, magma_int_t max_n, magma_queue_t queue) {
+        magma_dpotrf_vbatched_max_nocheck(uplo, d_n, d_A_array, d_ldda, dinfo, batchCount, max_n, queue);
+    }
+    static inline void trsm_max(magma_side_t side, magma_uplo_t uplo, magma_trans_t transA, magma_diag_t diag,
+                                magma_int_t max_m, magma_int_t max_n,
+                                magma_int_t* d_m, magma_int_t* d_n,
+                                double alpha,
+                                double** d_A_array, magma_int_t* d_ldda_A,
+                                double** d_B_array, magma_int_t* d_ldda_B,
+                                magma_int_t batchCount, magma_queue_t queue) {
+        magmablas_dtrsm_vbatched_max_nocheck(side, uplo, transA, diag, max_m, max_n, d_m, d_n, alpha, d_A_array, d_ldda_A, d_B_array, d_ldda_B, batchCount, queue);
+    }
+    static inline void gemm_max(magma_trans_t transA, magma_trans_t transB,
+                                magma_int_t* d_m, magma_int_t* d_n, magma_int_t* d_k,
+                                double alpha,
+                                double const* const* d_A_array, magma_int_t* d_ldda_A,
+                                double const* const* d_B_array, magma_int_t* d_ldda_B,
+                                double beta,
+                                double** d_C_array, magma_int_t* d_ldda_C,
+                                magma_int_t batchCount,
+                                magma_int_t max_m, magma_int_t max_n, magma_int_t max_k,
+                                magma_queue_t queue) {
+        magmablas_dgemm_vbatched_max_nocheck(transA, transB, d_m, d_n, d_k, alpha, d_A_array, d_ldda_A, d_B_array, d_ldda_B, beta, d_C_array, d_ldda_C, batchCount, max_m, max_n, max_k, queue);
+    }
+    static inline void potrf_final(magma_uplo_t uplo, magma_int_t* d_n, double** d_A_array, magma_int_t* d_ldda, magma_int_t* dinfo, magma_int_t batchCount, magma_queue_t queue) {
+        magma_dpotrf_vbatched(uplo, d_n, d_A_array, d_ldda, dinfo, batchCount, queue);
+    }
+    static inline void trsm_final(magma_side_t side, magma_uplo_t uplo, magma_trans_t transA, magma_diag_t diag,
+                                  magma_int_t* d_m, magma_int_t* d_n, double alpha,
+                                  double** d_A_array, magma_int_t* d_ldda_A,
+                                  double** d_B_array, magma_int_t* d_ldda_B,
+                                  magma_int_t batchCount, magma_queue_t queue) {
+        magmablas_dtrsm_vbatched(side, uplo, transA, diag, d_m, d_n, alpha, d_A_array, d_ldda_A, d_B_array, d_ldda_B, batchCount, queue);
+    }
+};
+
+template <>
+struct MagmaOps<float> {
+    static inline void potrf_neighbors(magma_uplo_t uplo, magma_int_t* d_n, float** d_A_array, magma_int_t* d_ldda, magma_int_t* dinfo, magma_int_t batchCount, magma_int_t max_n, magma_queue_t queue) {
+        magma_spotrf_vbatched_max_nocheck(uplo, d_n, d_A_array, d_ldda, dinfo, batchCount, max_n, queue);
+    }
+    static inline void trsm_max(magma_side_t side, magma_uplo_t uplo, magma_trans_t transA, magma_diag_t diag,
+                                magma_int_t max_m, magma_int_t max_n,
+                                magma_int_t* d_m, magma_int_t* d_n,
+                                float alpha,
+                                float** d_A_array, magma_int_t* d_ldda_A,
+                                float** d_B_array, magma_int_t* d_ldda_B,
+                                magma_int_t batchCount, magma_queue_t queue) {
+        magmablas_strsm_vbatched_max_nocheck(side, uplo, transA, diag, max_m, max_n, d_m, d_n, alpha, d_A_array, d_ldda_A, d_B_array, d_ldda_B, batchCount, queue);
+    }
+    static inline void gemm_max(magma_trans_t transA, magma_trans_t transB,
+                                magma_int_t* d_m, magma_int_t* d_n, magma_int_t* d_k,
+                                float alpha,
+                                float const* const* d_A_array, magma_int_t* d_ldda_A,
+                                float const* const* d_B_array, magma_int_t* d_ldda_B,
+                                float beta,
+                                float** d_C_array, magma_int_t* d_ldda_C,
+                                magma_int_t batchCount,
+                                magma_int_t max_m, magma_int_t max_n, magma_int_t max_k,
+                                magma_queue_t queue) {
+        magmablas_sgemm_vbatched_max_nocheck(transA, transB, d_m, d_n, d_k, alpha, d_A_array, d_ldda_A, d_B_array, d_ldda_B, beta, d_C_array, d_ldda_C, batchCount, max_m, max_n, max_k, queue);
+    }
+    static inline void potrf_final(magma_uplo_t uplo, magma_int_t* d_n, float** d_A_array, magma_int_t* d_ldda, magma_int_t* dinfo, magma_int_t batchCount, magma_queue_t queue) {
+        magma_spotrf_vbatched(uplo, d_n, d_A_array, d_ldda, dinfo, batchCount, queue);
+    }
+    static inline void trsm_final(magma_side_t side, magma_uplo_t uplo, magma_trans_t transA, magma_diag_t diag,
+                                  magma_int_t* d_m, magma_int_t* d_n, float alpha,
+                                  float** d_A_array, magma_int_t* d_ldda_A,
+                                  float** d_B_array, magma_int_t* d_ldda_B,
+                                  magma_int_t batchCount, magma_queue_t queue) {
+        magmablas_strsm_vbatched(side, uplo, transA, diag, d_m, d_n, alpha, d_A_array, d_ldda_A, d_B_array, d_ldda_B, batchCount, queue);
+    }
+};
+
 // Function to copy data from CPU to GPU and allocate memory with leading dimensions
-GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
+template <typename Real>
+GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos)
 {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -18,7 +98,7 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     // Set the GPU
     checkCudaError(cudaSetDevice(opts.gpu_id));
 
-    GpuData gpuData;
+    GpuDataT<Real> gpuData;
     // cpu leading dimensions (+1 for magma)
     gpuData.lda_locs.resize(blockInfos.size() + 1);
     gpuData.lda_locs_neighbors.resize(blockInfos.size() + 1);
@@ -31,31 +111,31 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     gpuData.h_const1.resize(blockInfos.size() + 1);
 
     // Allocate arrays of pointers on the host
-    gpuData.h_locs_array = new double *[blockInfos.size() * opts.dim];
-    gpuData.h_locs_neighbors_array = new double *[blockInfos.size() * opts.dim];
-    gpuData.h_observations_array = new double *[blockInfos.size()];
-    gpuData.h_observations_neighbors_array = new double *[blockInfos.size()];
-    gpuData.h_cov_array = new double *[blockInfos.size()];
-    gpuData.h_cross_cov_array = new double *[blockInfos.size()];
-    gpuData.h_conditioning_cov_array = new double *[blockInfos.size()];
-    gpuData.h_observations_neighbors_copy_array = new double *[blockInfos.size()];
-    gpuData.h_observations_copy_array = new double *[blockInfos.size()];
-    gpuData.h_mu_correction_array = new double *[blockInfos.size()];
-    gpuData.h_cov_correction_array = new double *[blockInfos.size()];
+    gpuData.h_locs_array = new Real *[blockInfos.size() * opts.dim];
+    gpuData.h_locs_neighbors_array = new Real *[blockInfos.size() * opts.dim];
+    gpuData.h_observations_array = new Real *[blockInfos.size()];
+    gpuData.h_observations_neighbors_array = new Real *[blockInfos.size()];
+    gpuData.h_cov_array = new Real *[blockInfos.size()];
+    gpuData.h_cross_cov_array = new Real *[blockInfos.size()];
+    gpuData.h_conditioning_cov_array = new Real *[blockInfos.size()];
+    gpuData.h_observations_neighbors_copy_array = new Real *[blockInfos.size()];
+    gpuData.h_observations_copy_array = new Real *[blockInfos.size()];
+    gpuData.h_mu_correction_array = new Real *[blockInfos.size()];
+    gpuData.h_cov_correction_array = new Real *[blockInfos.size()];
 
     // array of pointers for the device
-    checkCudaError(cudaMalloc(&gpuData.d_locs_array, blockInfos.size() * opts.dim * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_array, blockInfos.size() * opts.dim * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_observations_points_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_cov_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_cross_cov_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_conditioning_cov_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_observations_copy_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_mu_correction_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_cov_correction_array, blockInfos.size() * sizeof(double *)));
-    checkCudaError(cudaMalloc(&gpuData.d_range_device, opts.dim * sizeof(double)));
+    checkCudaError(cudaMalloc(&gpuData.d_locs_array, blockInfos.size() * opts.dim * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_array, blockInfos.size() * opts.dim * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_observations_points_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_cov_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_cross_cov_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_conditioning_cov_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_observations_copy_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_mu_correction_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_cov_correction_array, blockInfos.size() * sizeof(Real *)));
+    checkCudaError(cudaMalloc(&gpuData.d_range_device, opts.dim * sizeof(Real)));
 
     // Calculate the total memory needed for blocks and nearest neighbors
     size_t total_observations_points_size = 0;
@@ -86,22 +166,22 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
         gpuData.ldda_conditioning_cov[i] = gpuData.ldda_neighbors[i];
         gpuData.h_const1[i] = 1;
         // total size of contiguous memory 
-        total_cov_size += gpuData.ldda_cov[i] * m_blocks * sizeof(double);
-        total_conditioning_cov_size += gpuData.ldda_conditioning_cov[i] * m_nearest_neighbor * sizeof(double);
-        total_cross_cov_size += gpuData.ldda_conditioning_cov[i] * m_blocks * sizeof(double);
-        total_observations_points_size += gpuData.ldda_locs[i] * sizeof(double);
-        total_observations_nearestNeighbors_size += gpuData.ldda_neighbors[i] * sizeof(double);
-        total_locs_size_host += m_blocks * sizeof(double) * opts.dim;
-        total_locs_nearestNeighbors_size_host += m_nearest_neighbor * sizeof(double) * opts.dim;
-        total_locs_size_device += gpuData.ldda_locs[i] * sizeof(double) * opts.dim;
-        total_locs_nearestNeighbors_size_device += gpuData.ldda_neighbors[i] * sizeof(double) * opts.dim;
+        total_cov_size += gpuData.ldda_cov[i] * m_blocks * sizeof(Real);
+        total_conditioning_cov_size += gpuData.ldda_conditioning_cov[i] * m_nearest_neighbor * sizeof(Real);
+        total_cross_cov_size += gpuData.ldda_conditioning_cov[i] * m_blocks * sizeof(Real);
+        total_observations_points_size += gpuData.ldda_locs[i] * sizeof(Real);
+        total_observations_nearestNeighbors_size += gpuData.ldda_neighbors[i] * sizeof(Real);
+        total_locs_size_host += m_blocks * sizeof(Real) * opts.dim;
+        total_locs_nearestNeighbors_size_host += m_nearest_neighbor * sizeof(Real) * opts.dim;
+        total_locs_size_device += gpuData.ldda_locs[i] * sizeof(Real) * opts.dim;
+        total_locs_nearestNeighbors_size_device += gpuData.ldda_neighbors[i] * sizeof(Real) * opts.dim;
     }
 
     // Allocate contiguous memory on GPU
     gpuData.total_observations_points_size = total_observations_points_size;
     gpuData.total_observations_neighbors_size = total_observations_nearestNeighbors_size;
-    gpuData.total_locs_num_device = total_locs_size_device/sizeof(double)/opts.dim;
-    gpuData.total_locs_neighbors_num_device = total_locs_nearestNeighbors_size_device/sizeof(double)/opts.dim;
+    gpuData.total_locs_num_device = total_locs_size_device/sizeof(Real)/opts.dim;
+    gpuData.total_locs_neighbors_num_device = total_locs_nearestNeighbors_size_device/sizeof(Real)/opts.dim;
     checkCudaError(cudaMalloc(&gpuData.d_locs_device, total_locs_size_device));
     checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_device, total_locs_nearestNeighbors_size_device));
     checkCudaError(cudaMalloc(&gpuData.d_observations_device, total_observations_points_size));
@@ -128,15 +208,15 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     checkCudaError(cudaMemset(gpuData.d_cov_correction_device, 0, total_cov_size)); 
     
     // Prepare to store blocks data for coalesced memory access
-    double *locs_blocks_data = new double[total_locs_size_host/sizeof(double)];
-    double *locs_nearestNeighbors_data = new double[total_locs_nearestNeighbors_size_host/sizeof(double)];
+    Real *locs_blocks_data = new Real[total_locs_size_host/sizeof(Real)];
+    Real *locs_nearestNeighbors_data = new Real[total_locs_nearestNeighbors_size_host/sizeof(Real)];
 
     size_t locs_index = 0;
     size_t locs_nearestNeighbors_index = 0;
-    size_t _total_locs_num_host = total_locs_size_host/sizeof(double)/opts.dim;
-    size_t _total_locs_nearestNeighbors_num_host = total_locs_nearestNeighbors_size_host/sizeof(double)/opts.dim;
-    size_t _total_locs_num_device = total_locs_size_device/sizeof(double)/opts.dim;
-    size_t _total_locs_nearestNeighbors_num_device = total_locs_nearestNeighbors_size_device/sizeof(double)/opts.dim;
+    size_t _total_locs_num_host = total_locs_size_host/sizeof(Real)/opts.dim;
+    size_t _total_locs_nearestNeighbors_num_host = total_locs_nearestNeighbors_size_host/sizeof(Real)/opts.dim;
+    size_t _total_locs_num_device = total_locs_size_device/sizeof(Real)/opts.dim;
+    size_t _total_locs_nearestNeighbors_num_device = total_locs_nearestNeighbors_size_device/sizeof(Real)/opts.dim;
     for (size_t i = 0; i < blockInfos.size(); ++i)
     {
         int m_blocks = blockInfos[i].blocks.size();
@@ -146,7 +226,7 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
         {
             for (int d = 0; d < opts.dim; ++d)
             {
-                locs_blocks_data[locs_index + d * _total_locs_num_host] = blockInfos[i].blocks[j][d];
+                locs_blocks_data[locs_index + d * _total_locs_num_host] = static_cast<Real>(blockInfos[i].blocks[j][d]);
             }
             locs_index++;
         }
@@ -154,24 +234,24 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
         {
             for (int d = 0; d < opts.dim; ++d)
             {
-                locs_nearestNeighbors_data[locs_nearestNeighbors_index + d * _total_locs_nearestNeighbors_num_host] = blockInfos[i].nearestNeighbors[j][d];
+                locs_nearestNeighbors_data[locs_nearestNeighbors_index + d * _total_locs_nearestNeighbors_num_host] = static_cast<Real>(blockInfos[i].nearestNeighbors[j][d]);
             }
             locs_nearestNeighbors_index++;
         }
     }
 
     // Assign pointers to the beginning of each block's memory and copy data
-    double *locs_ptr = gpuData.d_locs_device;
-    double *locs_nearestNeighbors_ptr = gpuData.d_locs_neighbors_device;
-    double *observations_points_ptr = gpuData.d_observations_device;
-    double *observations_nearestNeighbors_ptr = gpuData.d_observations_neighbors_device;
-    double *cov_ptr = gpuData.d_cov_device;
-    double *conditioning_cov_ptr = gpuData.d_conditioning_cov_device;
-    double *cross_cov_ptr = gpuData.d_cross_cov_device;
-    double *observations_neighbors_copy_ptr = gpuData.d_observations_neighbors_copy_device;
-    double *observations_copy_ptr = gpuData.d_observations_copy_device;
-    double *mu_correction_ptr = gpuData.d_mu_correction_device;
-    double *cov_correction_ptr = gpuData.d_cov_correction_device;
+    Real *locs_ptr = gpuData.d_locs_device;
+    Real *locs_nearestNeighbors_ptr = gpuData.d_locs_neighbors_device;
+    Real *observations_points_ptr = gpuData.d_observations_device;
+    Real *observations_nearestNeighbors_ptr = gpuData.d_observations_neighbors_device;
+    Real *cov_ptr = gpuData.d_cov_device;
+    Real *conditioning_cov_ptr = gpuData.d_conditioning_cov_device;
+    Real *cross_cov_ptr = gpuData.d_cross_cov_device;
+    Real *observations_neighbors_copy_ptr = gpuData.d_observations_neighbors_copy_device;
+    Real *observations_copy_ptr = gpuData.d_observations_copy_device;
+    Real *mu_correction_ptr = gpuData.d_mu_correction_device;
+    Real *cov_correction_ptr = gpuData.d_cov_correction_device;
 
     // calculate size, and GPU pointers array
     size_t index_locs = 0;
@@ -198,24 +278,27 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
         gpuData.h_mu_correction_array[i] = mu_correction_ptr;
         gpuData.h_cov_correction_array[i] = cov_correction_ptr;
         // (observations)
-        checkCudaError(cudaMemcpy(observations_points_ptr, 
-                                   blockInfos[i].observations_blocks.data(), 
-                                   blockInfos[i].observations_blocks.size() * sizeof(double), 
-                                   cudaMemcpyHostToDevice));
-        checkCudaError(cudaMemcpy(observations_nearestNeighbors_ptr, 
-                                   blockInfos[i].observations_nearestNeighbors.data(), 
-                                   blockInfos[i].observations_nearestNeighbors.size() * sizeof(double), 
-                                   cudaMemcpyHostToDevice));
+        // cast observations to Real
+        {
+            std::vector<Real> tmp_obs(blockInfos[i].observations_blocks.size());
+            for (size_t t=0;t<tmp_obs.size();++t) tmp_obs[t] = static_cast<Real>(blockInfos[i].observations_blocks[t]);
+            checkCudaError(cudaMemcpy(observations_points_ptr, tmp_obs.data(), tmp_obs.size() * sizeof(Real), cudaMemcpyHostToDevice));
+        }
+        {
+            std::vector<Real> tmp_obs_nn(blockInfos[i].observations_nearestNeighbors.size());
+            for (size_t t=0;t<tmp_obs_nn.size();++t) tmp_obs_nn[t] = static_cast<Real>(blockInfos[i].observations_nearestNeighbors[t]);
+            checkCudaError(cudaMemcpy(observations_nearestNeighbors_ptr, tmp_obs_nn.data(), tmp_obs_nn.size() * sizeof(Real), cudaMemcpyHostToDevice));
+        }
         // copy the locations from the host to the device (locations + observations)
         // copy locations (coalesced memory access)
         for (int d = 0; d < opts.dim; ++d){
             checkCudaError(cudaMemcpy(locs_ptr + d * _total_locs_num_device, 
                                    locs_blocks_data + index_locs + d * _total_locs_num_host, 
-                                   m_blocks * sizeof(double), 
+                                   m_blocks * sizeof(Real), 
                                    cudaMemcpyHostToDevice));
             checkCudaError(cudaMemcpy(locs_nearestNeighbors_ptr + d * _total_locs_nearestNeighbors_num_device, 
                                    locs_nearestNeighbors_data + index_locs_nearestNeighbors + d * _total_locs_nearestNeighbors_num_host, 
-                                   m_nearest_neighbor * sizeof(double), 
+                                   m_nearest_neighbor * sizeof(Real), 
                                    cudaMemcpyHostToDevice));
         }
         // next pointer
@@ -239,47 +322,47 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
     // copy data array to the GPU
     checkCudaError(cudaMemcpy(gpuData.d_locs_array, 
                gpuData.h_locs_array, 
-               blockInfos.size() * opts.dim * sizeof(double *), 
+               blockInfos.size() * opts.dim * sizeof(Real *), 
                cudaMemcpyHostToDevice));   
     checkCudaError(cudaMemcpy(gpuData.d_locs_neighbors_array, 
                gpuData.h_locs_neighbors_array, 
-               blockInfos.size() * opts.dim * sizeof(double *), 
+               blockInfos.size() * opts.dim * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_observations_points_array, 
                gpuData.h_observations_array, 
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_array, 
                gpuData.h_observations_neighbors_array, 
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_cov_array, 
                gpuData.h_cov_array, 
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_conditioning_cov_array, 
                gpuData.h_conditioning_cov_array, 
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_cross_cov_array, 
                gpuData.h_cross_cov_array, 
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_array, 
                gpuData.h_observations_neighbors_copy_array, 
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_observations_copy_array, 
                gpuData.h_observations_copy_array, 
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_mu_correction_array, 
                gpuData.h_mu_correction_array,  
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
     checkCudaError(cudaMemcpy(gpuData.d_cov_correction_array, 
                gpuData.h_cov_correction_array,  
-               blockInfos.size() * sizeof(double *), 
+               blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
 
     // copy data from host to device
@@ -323,7 +406,8 @@ GpuData copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blockInfos
 }
 
 // Function to perform computation on the GPU
-double performComputationOnGPU(const GpuData &gpuData, const std::vector<double> &theta, Opts &opts)
+template <typename Real>
+double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<double> &theta, Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -359,70 +443,28 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                                    gpuData.d_observations_device, 
                                    gpuData.total_observations_points_size, 
                                    cudaMemcpyDeviceToDevice));
-    checkCudaError(cudaMemcpy(gpuData.d_range_device, 
-                                theta.data() + range_offset, 
-                                opts.dim * sizeof(double), 
-                                cudaMemcpyHostToDevice));
-    // checkCudaError(cudaStreamSynchronize(stream));
-
-    // Use the data on the GPU for computation
-    // 1. generate the covariance matrix, cross covariance matrix, conditioning covariance matrix
-    // take record of the time
-    // for (size_t k = 0; k < opts.dim; ++k){
-    //     magma_dprint_gpu(gpuData.lda_locs_neighbors[1], 1, gpuData.h_locs_neighbors_array[1] + k * gpuData.total_locs_neighbors_num_device, gpuData.ldda_conditioning_cov[1], queue);
-    // }
-    // for (size_t i = 0; i < batchCount; ++i)
-    // {   
-    //     // print h_locs_array[i]
-    //     // std::cout << "before cholesky factorization" << std::endl;
-    //     // magma_dprint_gpu_custom(gpuData.lda_locs[0], opts.dim, gpuData.h_locs_array[0], gpuData.ldda_cov[0], queue, 5);
-    //     compute_covariance(gpuData.h_locs_array[i],
-    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-    //                 gpuData.h_locs_array[i],
-    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-    //                 gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
-    //                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    //     compute_covariance(gpuData.h_locs_neighbors_array[i], 
-    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-    //                 gpuData.h_locs_array[i],
-    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-    //                 gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
-    //                 opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-    //     compute_covariance(gpuData.h_locs_neighbors_array[i],
-    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-    //                 gpuData.h_locs_neighbors_array[i], 
-    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-    //                 gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
-    //                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    //     // Synchronize to make sure the kernel has finished
-    //     checkCudaError(cudaStreamSynchronize(stream));
-    // }    
-    // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[0] << std::endl;
-    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
-    // magma_dprint_gpu_custom(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue, 5);
-    // Add timing variables
-    // cudaEvent_t start, stop;
-    // float milliseconds_covgen = 0;
-    // checkCudaError(cudaEventCreate(&start));
-    // checkCudaError(cudaEventCreate(&stop));
-    // // Start timing
-    // checkCudaError(cudaEventRecord(start, stream));
+    {
+        std::vector<Real> range_host(opts.dim);
+        for (int i=0;i<opts.dim;++i) range_host[i] = static_cast<Real>(theta[range_offset + i]);
+        checkCudaError(cudaMemcpy(gpuData.d_range_device, range_host.data(), opts.dim * sizeof(Real), cudaMemcpyHostToDevice));
+    }
+    checkCudaError(cudaStreamSynchronize(stream));
     
-    compute_covariance_vbatched(gpuData.d_locs_array,
+    compute_covariance_vbatched<Real>(gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    compute_covariance_vbatched(gpuData.d_locs_neighbors_array, 
+    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-    compute_covariance_vbatched(gpuData.d_locs_neighbors_array,
+    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
@@ -430,146 +472,69 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
     
-     // Stop timing
-    // checkCudaError(cudaEventRecord(stop, stream));
-    // checkCudaError(cudaEventSynchronize(stop));
-    // checkCudaError(cudaEventElapsedTime(&milliseconds_covgen, start, stop));
-
-    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue, 10);
-    
-    // 2. perform the computation
-    // 2.1 compute the correction term for mean and variance (i.e., Schur complement)
-    // checkMagmaError(magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
-    //                     gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-    //                     dinfo_magma, batchCount, queue));
-    // Start timing
-    // checkCudaError(cudaEventRecord(start, stream));
-    // float milliseconds_cholesky_trsm_gemm = 0;
-    checkMagmaError(magma_dpotrf_vbatched_max_nocheck(
-            MagmaLower, d_lda_locs_neighbors,
-            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-            dinfo_magma, batchCount, max_m, queue));
+    // cholesky factorization
+    MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
     // trsm
-    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
-    // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue);
-    // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs_neighbors[1], gpuData.h_conditioning_cov_array[1], gpuData.ldda_conditioning_cov[1], queue);
-    magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
-                        max_m, max_n1, 
+    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                        max_m, max_n1,
                         d_lda_locs_neighbors, d_lda_locs,
-                        1.,
+                        (Real)1.0,
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_cross_cov_array, d_ldda_cross_cov,
                         batchCount, queue);
-    magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
-                        max_m, max_n2, 
+    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                        max_m, max_n2,
                         d_lda_locs_neighbors, d_const1,
-                        1.,
+                        (Real)1.0,
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
                         batchCount, queue);
     // gemm
-    // magma_dprint_gpu(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue);
-    magmablas_dgemm_vbatched_max_nocheck(MagmaTrans, MagmaNoTrans,
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
-                             1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             0, gpuData.d_cov_correction_array, d_ldda_cov,
-                             batchCount, 
-                             max_n1, max_n1, max_m, 
+                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             (Real)0.0, gpuData.d_cov_correction_array, d_ldda_cov,
+                             batchCount,
+                             max_n1, max_n1, max_m,
                              queue);
-    magmablas_dgemm_vbatched_max_nocheck(MagmaTrans, MagmaNoTrans,
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_const1, d_lda_locs_neighbors,
-                             1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                             0, gpuData.d_mu_correction_array, d_ldda_locs,
-                             batchCount, 
+                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                             (Real)0.0, gpuData.d_mu_correction_array, d_ldda_locs,
+                             batchCount,
                              max_n1, max_n2, max_m,
                              queue);
-    // magma_dprint_gpu_custom(gpuData.lda_locs_neighbors[1], gpuData.lda_locs[1], gpuData.h_cross_cov_array[1], gpuData.ldda_cross_cov[1], queue, 10);
-    // Stop timing
-    // checkCudaError(cudaEventRecord(stop, stream));
-    // checkCudaError(cudaEventSynchronize(stop));
-    // checkCudaError(cudaEventElapsedTime(&milliseconds_cholesky_trsm_gemm, start, stop));
 
-    // std::cout << "before cholesky factorization" << std::endl;
-    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
-    // magma_dprint_gpu(gpuData.lda_locs[1], gpuData.lda_locs[1], gpuData.h_cov_correction_array[0], gpuData.ldda_cov[1], queue);
     // 2.2 compute the conditional mean and variance using batched kernels
-    for (size_t i = 0; i < batchCount; ++i){
-        // compute conditional variance
-        magmablas_dgeadd(gpuData.lda_locs[i], gpuData.lda_locs[i],
-                        -1.,
-                        gpuData.h_cov_correction_array[i], gpuData.ldda_locs[i], 
-                        gpuData.h_cov_array[i], gpuData.ldda_cov[i],
-                        queue);
-        // compute conditional mean
-        magmablas_dgeadd(gpuData.lda_locs[i], 1,
-                        -1.,
-                        gpuData.h_mu_correction_array[i], gpuData.ldda_locs[i], 
-                        gpuData.h_observations_copy_array[i], gpuData.ldda_locs[i],
-                        queue);
-        // print h_mu_correction_array[i]
-        // print gpuData.ldda_locs[i]
-        // std::cout << "gpuData.ldda_locs[" << i << "]: " << gpuData.ldda_locs[i] << ", gpuData.lda_locs[" << i << "]: " << gpuData.lda_locs[i] << std::endl;
-        // magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_mu_correction_array[i], gpuData.ldda_locs[i], queue);
-    }
-    // To be used in future
-    // compute conditional variance: h_cov_array[i] -= h_cov_correction_array[i]
-    // checkCudaError(cudaGetLastError()); // Clear any previous errors 
-    // batched_matrix_add(
-    //     gpuData.d_cov_array, gpuData.d_ldda_cov,
-    //     gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-    //     -1.0, batchCount, stream);
-    // checkCudaError(cudaGetLastError()); // Check for errors after matrix add
-    
-    // // compute conditional mean: h_observations_copy_array[i] -= h_mu_correction_array[i]
-    // batched_vector_add(
-    //     gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
-    //     gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-    //     -1.0, batchCount, stream); 
-    // checkCudaError(cudaGetLastError()); // Check for errors after vector add
-    // checkCudaError(cudaStreamSynchronize(stream));
+    batched_matrix_add<Real>(
+        gpuData.d_cov_array, gpuData.d_ldda_cov,
+        gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
+        -1.0, batchCount, stream);
+    batched_vector_add<Real>(
+        gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
+        gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
+        -1.0, batchCount, stream); 
+    checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
-    // std::cout << "before cholesky factorization" << std::endl;
-    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_correction_array[0], gpuData.ldda_cov[0], queue);
-    // magma_dprint_gpu(gpuData.lda_locs[0], gpuData.lda_locs[0], gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
-    // copy and print dinfo_magma
-    // Start timing
-    // checkCudaError(cudaEventRecord(start, stream));
-    checkMagmaError(magma_dpotrf_vbatched(
-            MagmaLower, d_lda_locs,
-            gpuData.d_cov_array, d_ldda_cov,
-            dinfo_magma, batchCount, queue));
-    // std::cout << "after cholesky factorization" << std::endl;
-    // std::cout << "gpuData.lda_locs[0]: " << gpuData.lda_locs[0] << std::endl;
-    // magma_dprint_gpu(gpuData.lda_locs[0], 5, gpuData.h_cov_array[0], gpuData.ldda_cov[0], queue);
-    magmablas_dtrsm_vbatched(
-        MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-        d_lda_locs, d_const1, 1.,
+    MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
+    MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+        d_lda_locs, d_const1, (Real)1.0,
         gpuData.d_cov_array, d_ldda_cov,
         gpuData.d_observations_copy_array, d_ldda_locs,
         batchCount, queue);
-    // Stop timing
-    // checkCudaError(cudaEventRecord(stop, stream));
-    // checkCudaError(cudaEventSynchronize(stop));
-    // float milliseconds_cholesky_trsm = 0;
-    // checkCudaError(cudaEventElapsedTime(&milliseconds_cholesky_trsm, start, stop));
 
     // norm for all blocks
-    double norm2_item = norm2_batch(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
+    double norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
     // determinant for all blocks
-    double log_det_item = log_det_batch(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
+    double log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
     // sum for log-likelihood
     double log_likelihood = -0.5 *(
         log_det_item + norm2_item // the constant term is removed for simplicity
     );
-    //print log_det_item and norm2_item
-    // std::cout << "batchcount: " << batchCount << ", log_det_item: " << log_det_item << ", norm2_item: " << norm2_item << std::endl;
     double log_likelihood_all = 0;
-    // opts.time_cholesky_trsm_gemm += milliseconds_cholesky_trsm_gemm;
-    // opts.time_cholesky_trsm += milliseconds_cholesky_trsm;
-    // opts.time_covgen += milliseconds_covgen;
     // mpi sum for log-likelihood
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
@@ -577,7 +542,8 @@ double performComputationOnGPU(const GpuData &gpuData, const std::vector<double>
 }
 
 // Function to clean up GPU memory
-void cleanupGpuMemory(GpuData &gpuData)
+template <typename Real>
+void cleanupGpuMemory(GpuDataT<Real> &gpuData)
 {
     cudaFree(gpuData.d_cov_device);
     cudaFree(gpuData.d_conditioning_cov_device);
@@ -603,7 +569,8 @@ void cleanupGpuMemory(GpuData &gpuData)
 }
 
 // calculate the total flops
-double gflopsTotal(const GpuData &gpuData, const Opts &opts)
+template <typename Real>
+double gflopsTotal(const GpuDataT<Real> &gpuData, const Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -645,3 +612,13 @@ double gflopsTotal(const GpuData &gpuData, const Opts &opts)
 
     return total_gflops;
 }
+
+// Explicit instantiations for float and double
+template GpuDataT<double> copyDataToGPU<double>(const Opts&, const std::vector<BlockInfo>&);
+template GpuDataT<float> copyDataToGPU<float>(const Opts&, const std::vector<BlockInfo>&);
+template double performComputationOnGPU<double>(const GpuDataT<double>&, const std::vector<double>&, Opts&);
+template double performComputationOnGPU<float>(const GpuDataT<float>&, const std::vector<double>&, Opts&);
+template void cleanupGpuMemory<double>(GpuDataT<double>&);
+template void cleanupGpuMemory<float>(GpuDataT<float>&);
+template double gflopsTotal<double>(const GpuDataT<double>&, const Opts&);
+template double gflopsTotal<float>(const GpuDataT<float>&, const Opts&);

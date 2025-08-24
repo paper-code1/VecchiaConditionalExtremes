@@ -15,14 +15,17 @@
 #include <random>
 #include <numeric>
 #include <fstream>
+#include <type_traits>
 
 #include "gpu_operations.h"
 #include "gpu_covariance.h"
 #include "prediction.h"
 #include "error_checking.h"
+#include "magma_dispatch.h"
 
-// Function to perform prediction on the GPU
-std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData, const std::vector<double> &theta, const Opts &opts)
+// Templated function to perform prediction on the GPU
+template <typename Real>
+std::tuple<double, double, double> performPredictionOnGPU(const GpuDataT<Real> &gpuData, const std::vector<double> &theta, const Opts &opts)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -57,59 +60,32 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData
                                    gpuData.d_observations_device, 
                                    gpuData.total_observations_points_size, 
                                    cudaMemcpyDeviceToDevice));
-    checkCudaError(cudaMemcpy(gpuData.d_range_device, 
-                                   theta.data() + range_offset, 
-                                   opts.dim * sizeof(double), 
+    {
+        std::vector<Real> range_host(opts.dim);
+        for (int i=0;i<opts.dim;++i) range_host[i] = static_cast<Real>(theta[range_offset + i]);
+        checkCudaError(cudaMemcpy(gpuData.d_range_device, 
+                                   range_host.data(), 
+                                   opts.dim * sizeof(Real), 
                                    cudaMemcpyHostToDevice));
+    }
 
     // Use the data on the GPU for computation
     // 1. generate the covariance matrix, cross covariance matrix, conditioning covariance matrix
-    // // take record of the time
-    // for (size_t i = 0; i < batchCount; ++i)
-    // {   
-    //     compute_covariance(gpuData.h_locs_array[i],
-    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-    //                 gpuData.h_locs_array[i],
-    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-    //                 gpuData.h_cov_array[i], gpuData.ldda_cov[i], gpuData.lda_locs[i],
-    //                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    //     compute_covariance(gpuData.h_locs_neighbors_array[i], 
-    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-    //                 gpuData.h_locs_array[i],
-    //                 gpuData.lda_locs[i], 1, gpuData.total_locs_num_device,
-    //                 gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], gpuData.lda_locs[i],
-    //                 opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-    //     compute_covariance(gpuData.h_locs_neighbors_array[i],
-    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-    //                 gpuData.h_locs_neighbors_array[i], 
-    //                 gpuData.lda_locs_neighbors[i], 1, gpuData.total_locs_neighbors_num_device,
-    //                 gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], gpuData.lda_locs_neighbors[i],
-    //                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    //     // Synchronize to make sure the kernel has finished
-    //     checkCudaError(cudaStreamSynchronize(stream));
-    //     // if (i == 1){
-    //     //     // magma_dprint_gpu(gpuData.lda_locs_neighbors[i], gpuData.lda_locs_neighbors[i], gpuData.h_conditioning_cov_array[i], gpuData.ldda_conditioning_cov[i], queue);
-    //     //     // magma_dprint_gpu(gpuData.lda_locs_neighbors[i],gpuData.lda_locs[i], gpuData.h_cross_cov_array[i], gpuData.ldda_cross_cov[i], queue);
-    //     //     // print coordinate 
-    //     //     magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i], gpuData.ldda_cov[i], queue);
-    //     //     magma_dprint_gpu(gpuData.lda_locs[i], 1, gpuData.h_locs_array[i] + gpuData.total_locs_num_device, gpuData.ldda_cov[i], queue);
-    //     // }
-    // }    
-    compute_covariance_vbatched(gpuData.d_locs_array,
+    compute_covariance_vbatched<Real>(gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    compute_covariance_vbatched(gpuData.d_locs_neighbors_array, 
+    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-    compute_covariance_vbatched(gpuData.d_locs_neighbors_array,
+    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
@@ -121,40 +97,38 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData
     
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)
-    magma_dpotrf_vbatched(MagmaLower, d_lda_locs_neighbors,
+    MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors,
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        dinfo_magma, batchCount, queue);
+                        dinfo_magma, batchCount, max_m, queue);
     // trsm
-    magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
+    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
                         max_m, max_n1, 
                         d_lda_locs_neighbors, d_lda_locs,
-                        1.,
+                        (Real)1.0,
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_cross_cov_array, d_ldda_cross_cov,
                         batchCount, queue);
-    // magma_dprint_gpu(gpuData.lda_locs_neighbors[160], 1, gpuData.h_observations_neighbors_copy_array[160], gpuData.ldda_conditioning_cov[160], queue);
-    magmablas_dtrsm_vbatched_max_nocheck(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
+    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
                         max_m, max_n2, 
                         d_lda_locs_neighbors, d_const1,
-                        1.,
+                        (Real)1.0,
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
                         batchCount, queue);
-    // magma_dprint_gpu(gpuData.lda_locs_neighbors[160], 1, gpuData.h_observations_neighbors_copy_array[160], gpuData.ldda_conditioning_cov[160], queue);
     // gemm
-    magmablas_dgemm_vbatched_max_nocheck(MagmaTrans, MagmaNoTrans,
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
-                             1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
                                 gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             0, gpuData.d_cov_correction_array, d_ldda_cov,
+                             (Real)0, gpuData.d_cov_correction_array, d_ldda_cov,
                              batchCount, 
                              max_n1, max_n1, max_m, 
                              queue);
-    magmablas_dgemm_vbatched_max_nocheck(MagmaTrans, MagmaNoTrans,
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_const1, d_lda_locs_neighbors,
-                             1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
                                 gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                             0, gpuData.d_mu_correction_array, d_ldda_locs,
+                             (Real)0, gpuData.d_mu_correction_array, d_ldda_locs,
                              batchCount, 
                              max_n1, max_n2, max_m,
                              queue);
@@ -162,42 +136,52 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData
     // 2.2 compute the conditional mean and variance
     for (size_t i = 0; i < batchCount; ++i){
         // compute conditional variance
-        magmablas_dgeadd(gpuData.lda_locs[i], gpuData.lda_locs[i],
-                        -1.,
-                        gpuData.h_cov_correction_array[i], gpuData.ldda_locs[i], 
-                        gpuData.h_cov_array[i], gpuData.ldda_cov[i],
-                        queue);
+        if constexpr (std::is_same<Real,double>::value) {
+            magmablas_dgeadd(gpuData.lda_locs[i], gpuData.lda_locs[i],
+                            -1.,
+                            (double*)gpuData.h_cov_correction_array[i], gpuData.ldda_locs[i], 
+                            (double*)gpuData.h_cov_array[i], gpuData.ldda_cov[i],
+                            queue);
+        } else {
+            magmablas_sgeadd(gpuData.lda_locs[i], gpuData.lda_locs[i],
+                            -1.f,
+                            (float*)gpuData.h_cov_correction_array[i], gpuData.ldda_locs[i], 
+                            (float*)gpuData.h_cov_array[i], gpuData.ldda_cov[i],
+                            queue);
+        }
         // compute conditional mean
         // copy h_mu_correction_array to h_observations_copy_array
         checkCudaError(cudaMemcpy(gpuData.h_observations_copy_array[i], 
                                   gpuData.h_mu_correction_array[i], 
-                                  gpuData.lda_locs[i] * sizeof(double), 
+                                  gpuData.lda_locs[i] * sizeof(Real), 
                                   cudaMemcpyDeviceToHost));
     }
     checkCudaError(cudaStreamSynchronize(stream));
 
     // New code starts here
     // 3. Copy mean and variance from GPU to CPU
-    std::vector<double> h_means(gpuData.numPointsPerProcess);
-    std::vector<double> h_variances(gpuData.numPointsPerProcess);
-    std::vector<double> true_observations(gpuData.numPointsPerProcess);
+    std::vector<Real> h_means(gpuData.numPointsPerProcess);
+    std::vector<Real> h_variances(gpuData.numPointsPerProcess);
+    std::vector<Real> true_observations(gpuData.numPointsPerProcess);
     // Copy true observations, accounting for padding
     int offset = 0;
     for (size_t i = 0; i < batchCount; ++i) {
         checkCudaError(cudaMemcpy(true_observations.data() + offset, 
                                   gpuData.h_observations_array[i], 
-                                  gpuData.lda_locs[i] * sizeof(double), 
+                                  gpuData.lda_locs[i] * sizeof(Real), 
                                   cudaMemcpyDeviceToHost));
         checkCudaError(cudaMemcpy(h_means.data() + offset, 
                                   gpuData.h_observations_copy_array[i], 
-                                  gpuData.lda_locs[i] * sizeof(double), 
+                                  gpuData.lda_locs[i] * sizeof(Real), 
                                   cudaMemcpyDeviceToHost));
         //copy the diagonal of the covariance matrix
         for (size_t j = 0; j < gpuData.lda_locs[i]; ++j){
-            checkCudaError(cudaMemcpy(h_variances.data() + offset + j, 
+            Real tmp;
+            checkCudaError(cudaMemcpy(&tmp, 
                                       &gpuData.h_cov_array[i][j * gpuData.ldda_cov[i] + j], 
-                                      sizeof(double), 
+                                      sizeof(Real), 
                                       cudaMemcpyDeviceToHost));
+            h_variances[offset + j] = tmp;
         }
         offset += gpuData.lda_locs[i];
     }
@@ -237,19 +221,9 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData
         if (std::abs(true_observations[i]) > 1e-5) {  // Avoid division by zero
             double rmspe = std::pow(100 * (sample_means[i] - true_observations[i]) / true_observations[i], 2);
             local_rmspe_sum += rmspe;
-            // if (rmspe > 500){
-            //     std::cout << "rank: " << rank << " abnormal rmspe: " << rmspe << " sample_means: " << sample_means[i] << " true_observations: " << true_observations[i] << std::endl;
-            // }
         }
-        // print the sample mean and true observation
+
         // Save prediction results to CSV file
-        // if (rank == 0) {
-        //     std::ofstream prediction_file("prediction_results.csv", std::ios::app);
-        //     prediction_file << sample_means[i] << "," << true_observations[i] << "," 
-        //                   << (sample_means[i] - true_observations[i])/true_observations[i] * 100 << "\n";
-        //     prediction_file.close();
-        // }
-        
         double ci_lower = sample_means[i] - 1.96 * std::sqrt(sample_variances[i]);
         double ci_upper = sample_means[i] + 1.96 * std::sqrt(sample_variances[i]);
         
@@ -280,3 +254,7 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuData &gpuData
     }
     return std::make_tuple(mspe, rmspe, ci_coverage);
 }
+
+// Explicit instantiations
+template std::tuple<double,double,double> performPredictionOnGPU<double>(const GpuDataT<double>&, const std::vector<double>&, const Opts&);
+template std::tuple<double,double,double> performPredictionOnGPU<float>(const GpuDataT<float>&, const std::vector<double>&, const Opts&);

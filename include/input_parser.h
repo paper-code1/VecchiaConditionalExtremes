@@ -32,6 +32,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("distance_scale", "Distance scale for blocks, used for scaling distance", cxxopts::value<std::vector<double>>())
     ("distance_scale_init", "Initial distance scale for blocks, used for optimization", cxxopts::value<std::vector<double>>())
     ("kernel_type", "Kernel type", cxxopts::value<std::string>()->default_value("Matern72"))
+    ("precision", "Floating point precision (double|float)", cxxopts::value<std::string>()->default_value("double"))
     ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>())
     ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>())
     ("upper_bounds", "Upper bounds for optimization", cxxopts::value<std::vector<double>>())
@@ -71,6 +72,20 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
             std::cerr << e.what() << '\n';
         }
         return false;
+    }
+    // precision
+    {
+        std::string prec = result["precision"].as<std::string>();
+        if (prec == "double" || prec == "fp64" || prec == "64") {
+            opts.precision = PrecisionType::Double;
+        } else if (prec == "float" || prec == "single" || prec == "fp32" || prec == "32") {
+            opts.precision = PrecisionType::Float;
+        } else {
+            if (rank == 0) {
+                std::cerr << "Invalid precision: " << prec << ". Use 'double' or 'float'." << std::endl;
+            }
+            return false;
+        }
     }
     opts.numPointsTotal = result["num_total_points"].as<long long>();
     opts.numPointsPerProcess = opts.numPointsTotal / size + (rank < opts.numPointsTotal % size);
