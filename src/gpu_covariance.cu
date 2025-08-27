@@ -189,7 +189,6 @@ __global__ void Matern72_scaled_matcov_kernel(
     }
 }
 
-
 // core kernel for batched matrix generation 
 template <typename Real>
 __device__ void Matern72_scaled_matcov_vbatched_kernel_device(
@@ -220,6 +219,92 @@ __device__ void Matern72_scaled_matcov_vbatched_kernel_device(
     }
 }
 
+// core kernel for batched matrix generation 
+template <typename Real>
+__device__ void Matern52_scaled_matcov_vbatched_kernel_device(
+    const Real* d_X1, int ldx1, int incx1, int stridex1,
+    const Real* d_X2, int ldx2, int incx2, int stridex2,
+    Real* d_C, int ldc, int n, int dim, 
+    Real sigma2, const Real* range, 
+    Real nugget, bool nugget_tag,
+    int gtx, int gty) {
+    if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        Real dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            Real x1 = d_X1[gtx * incx1 + k * stridex1];
+            Real x2 = d_X2[gty * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        Real scaled_distance = sqrt(dist_sqaure);
+        Real a0 = 1.0;
+        Real a1 = 1.0;
+        Real a2 = 1.0 / 3.0;
+        Real item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance;
+        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (gtx == gty && gtx < ldx1 && gty < ldx2 && nugget_tag) {
+        d_C[gtx + gty * ldc] += nugget;
+    }
+}
+
+// core kernel for batched matrix generation 
+template <typename Real>
+__device__ void Matern32_scaled_matcov_vbatched_kernel_device(
+    const Real* d_X1, int ldx1, int incx1, int stridex1,
+    const Real* d_X2, int ldx2, int incx2, int stridex2,
+    Real* d_C, int ldc, int n, int dim, 
+    Real sigma2, const Real* range, 
+    Real nugget, bool nugget_tag,
+    int gtx, int gty) {
+    if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        Real dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            Real x1 = d_X1[gtx * incx1 + k * stridex1];
+            Real x2 = d_X2[gty * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        Real scaled_distance = sqrt(dist_sqaure);
+        Real a0 = 1.0;
+        Real a1 = 1.0;
+        // Real a2 = 1.0 / 2.0;
+        Real item_poly = a0 + a1 * scaled_distance;
+        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (gtx == gty && gtx < ldx1 && gty < ldx2 && nugget_tag) {
+        d_C[gtx + gty * ldc] += nugget;
+    }
+}
+
+// core kernel for batched matrix generation 
+template <typename Real>
+__device__ void Matern12_scaled_matcov_vbatched_kernel_device(
+    const Real* d_X1, int ldx1, int incx1, int stridex1,
+    const Real* d_X2, int ldx2, int incx2, int stridex2,
+    Real* d_C, int ldc, int n, int dim, 
+    Real sigma2, const Real* range, 
+    Real nugget, bool nugget_tag,
+    int gtx, int gty) {
+    if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        Real dist_sqaure = 0;
+        for (int k = 0; k < dim; k++) {
+            Real x1 = d_X1[gtx * incx1 + k * stridex1];
+            Real x2 = d_X2[gty * incx2 + k * stridex2];
+            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+        }
+        Real scaled_distance = sqrt(dist_sqaure);
+        Real a0 = 1.0;
+        // Real a1 = 1.0;
+        Real item_poly = a0;
+        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+    }
+    // add nugget
+    if (gtx == gty && gtx < ldx1 && gty < ldx2 && nugget_tag) {
+        d_C[gtx + gty * ldc] += nugget;
+    }
+}
+
 // batched matrix generation 
 template <typename Real>
 __global__ void Matern72_scaled_matcov_vbatched_kernel(
@@ -235,6 +320,50 @@ __global__ void Matern72_scaled_matcov_vbatched_kernel(
     Matern72_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range, nugget, nugget_tag, gtx, gty);
 }
 
+// batched matrix generation 
+template <typename Real>
+__global__ void Matern52_scaled_matcov_vbatched_kernel(
+    Real** d_X1, const int* ldx1, int incx1, int stridex1,
+    Real** d_X2, const int* ldx2, int incx2, int stridex2,
+    Real** d_C, const int* ldc, const int* n, int dim, 
+    const Real sigma2, const Real nugget, const Real* range, bool nugget_tag) {
+    // batched id
+    const int batchid = blockIdx.z;
+    const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int gty = blockIdx.y * blockDim.y + threadIdx.y;
+
+    Matern52_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range, nugget, nugget_tag, gtx, gty);
+}
+
+// batched matrix generation 
+template <typename Real>
+__global__ void Matern32_scaled_matcov_vbatched_kernel(
+    Real** d_X1, const int* ldx1, int incx1, int stridex1,
+    Real** d_X2, const int* ldx2, int incx2, int stridex2,
+    Real** d_C, const int* ldc, const int* n, int dim, 
+    const Real sigma2, const Real nugget, const Real* range, bool nugget_tag) {
+    // batched id
+    const int batchid = blockIdx.z;
+    const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int gty = blockIdx.y * blockDim.y + threadIdx.y;
+
+    Matern32_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range,   nugget, nugget_tag, gtx, gty);
+}
+
+// batched matrix generation 
+template <typename Real>
+__global__ void Matern12_scaled_matcov_vbatched_kernel(
+    Real** d_X1, const int* ldx1, int incx1, int stridex1,
+    Real** d_X2, const int* ldx2, int incx2, int stridex2,
+    Real** d_C, const int* ldc, const int* n, int dim, 
+    const Real sigma2, const Real nugget, const Real* range, bool nugget_tag) {
+    // batched id
+    const int batchid = blockIdx.z;
+    const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int gty = blockIdx.y * blockDim.y + threadIdx.y;
+
+    Matern12_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range, nugget, nugget_tag, gtx, gty);
+}
 
 
 template <typename Real>
@@ -322,6 +451,75 @@ void Matern72_scaled_matcov_vbatched(
         int gridz = min(max_batch, batchCount - i);
         dim3 gridDim(gridx, gridy, gridz);
         Matern72_scaled_matcov_vbatched_kernel<Real><<<gridDim, blockDim, 0, stream>>>(d_X1 + i, ldx1 + i, incx1, stridex1, d_X2 + i, ldx2 + i, incx2, stridex2, d_C + i, ldc + i, n + i, dim, (Real)theta[0], (Real)theta[1], range, nugget_tag);
+    }
+}
+
+// batched version
+template <typename Real>
+void Matern52_scaled_matcov_vbatched(
+    Real** d_X1, const int* ldx1, int incx1, int stridex1,
+    Real** d_X2, const int* ldx2, int incx2, int stridex2,
+    Real** d_C, const int* ldc, const int* n, int dim, const std::vector<double> &theta,
+    const Real* range, bool nugget_tag, 
+    int max_ldx1, int max_ldx2,
+    int batchCount, cudaStream_t stream) {
+    // Launch kernel for each single batch
+    dim3 blockDim(THREAD_X, THREAD_Y, 1);
+    const int gridx = ((max_ldx1 + blockDim.x - 1) / blockDim.x);
+    const int gridy = ((max_ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    // for loop over each batch
+    const int max_batch = 65535;
+    for (int i = 0; i < batchCount; i+= max_batch) {
+        int gridz = min(max_batch, batchCount - i);
+        dim3 gridDim(gridx, gridy, gridz);
+        Matern52_scaled_matcov_vbatched_kernel<Real><<<gridDim, blockDim, 0, stream>>>(d_X1 + i, ldx1 + i, incx1, stridex1, d_X2 + i, ldx2 + i, incx2, stridex2, d_C + i, ldc + i, n + i, dim, (Real)theta[0], (Real)theta[1], range, nugget_tag);
+    }
+}
+
+// batched version
+template <typename Real>
+void Matern32_scaled_matcov_vbatched(
+    Real** d_X1, const int* ldx1, int incx1, int stridex1,
+    Real** d_X2, const int* ldx2, int incx2, int stridex2,
+    Real** d_C, const int* ldc, const int* n, int dim, const std::vector<double> &theta,
+    const Real* range, bool nugget_tag, 
+    int max_ldx1, int max_ldx2,
+    int batchCount, cudaStream_t stream) {
+    // Launch kernel for each single batch
+    dim3 blockDim(THREAD_X, THREAD_Y, 1);
+    const int gridx = ((max_ldx1 + blockDim.x - 1) / blockDim.x);
+    const int gridy = ((max_ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    // for loop over each batch
+    const int max_batch = 65535;
+    for (int i = 0; i < batchCount; i+= max_batch) {
+        int gridz = min(max_batch, batchCount - i);
+        dim3 gridDim(gridx, gridy, gridz);
+        Matern32_scaled_matcov_vbatched_kernel<Real><<<gridDim, blockDim, 0, stream>>>(d_X1 + i, ldx1 + i, incx1, stridex1, d_X2 + i, ldx2 + i, incx2, stridex2, d_C + i, ldc + i, n + i, dim, (Real)theta[0], (Real)theta[1], range, nugget_tag);
+    }
+}
+
+// batched version
+template <typename Real>
+void Matern12_scaled_matcov_vbatched(
+    Real** d_X1, const int* ldx1, int incx1, int stridex1,
+    Real** d_X2, const int* ldx2, int incx2, int stridex2,
+    Real** d_C, const int* ldc, const int* n, int dim, const std::vector<double> &theta,
+    const Real* range, bool nugget_tag, 
+    int max_ldx1, int max_ldx2,
+    int batchCount, cudaStream_t stream) {
+    // Launch kernel for each single batch
+    dim3 blockDim(THREAD_X, THREAD_Y, 1);
+    const int gridx = ((max_ldx1 + blockDim.x - 1) / blockDim.x);
+    const int gridy = ((max_ldx2 + blockDim.y - 1) / blockDim.y);
+    // theta[0]: variance, theta[1]: nugget, theta[2:]: range
+    // for loop over each batch
+    const int max_batch = 65535;
+    for (int i = 0; i < batchCount; i+= max_batch) {
+        int gridz = min(max_batch, batchCount - i);
+        dim3 gridDim(gridx, gridy, gridz);
+        Matern12_scaled_matcov_vbatched_kernel<Real><<<gridDim, blockDim, 0, stream>>>(d_X1 + i, ldx1 + i, incx1, stridex1, d_X2 + i, ldx2 + i, incx2, stridex2, d_C + i, ldc + i, n + i, dim, (Real)theta[0], (Real)theta[1], range, nugget_tag);
     }
 }
 
@@ -624,7 +822,38 @@ void compute_covariance_vbatched(Real** d_X1, const int* ldx1, int incx1, int st
     int max_ldx2 = thrust::reduce(thrust::cuda::par.on(stream), d_ldx2, d_ldx2 + batchCount, 0, thrust::maximum<int>());
 
     switch (opts.kernel_type) {
+        case KernelType::Matern12:
+            // std::cout << "Matern12 batched" << std::endl;
+            Matern12_scaled_matcov_vbatched<Real>(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
+                stream);
+            break;
+        case KernelType::Matern32:
+            // std::cout << "Matern32 batched" << std::endl;
+            Matern32_scaled_matcov_vbatched<Real>(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
+                stream);
+            break;
+        case KernelType::Matern52:
+            // std::cout << "Matern52 batched" << std::endl;
+            Matern52_scaled_matcov_vbatched<Real>(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
+                stream);
+            break;
         case KernelType::Matern72:
+            // std::cout << "Matern72 batched" << std::endl;
             Matern72_scaled_matcov_vbatched<Real>(
                 d_X1, ldx1, incx1, stridex1,
                 d_X2, ldx2, incx2, stridex2,

@@ -46,8 +46,12 @@ std::vector<PointMetadata> generateRandomPoints(int numPointsPerProcess, const O
         {
             pointsMetadata[i].coordinates[j] = generateRandomDouble();
         }
-        pointsMetadata[i].observation = generateRandomDouble();
-        // pointsMetadata[i].observation = 0.0;
+        if (opts.maxeval == 1){
+            pointsMetadata[i].observation = 0.0;
+        }
+        else{
+            pointsMetadata[i].observation = generateRandomDouble();
+        }
     }
 
     return pointsMetadata;

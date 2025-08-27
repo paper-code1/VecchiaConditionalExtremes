@@ -1,8 +1,11 @@
 # !/bin/bash
 
 N=5000
-bc=(500)
-m_bv=(5 10 20 30 60 90 120 150 180 210 240 270)
+# bc=(500)
+# m_bv=(5 10 20 30 60 90 120 150 180 210 240 270)
+
+bc=(1)
+m_bv=(5000)
 DATA_DIR="./experiments/simulations/maternSimuData"
 train_metadata_path="$DATA_DIR/training_data_kl.csv"
 params_path="$DATA_DIR/hyperparameters.csv"

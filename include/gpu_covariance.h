@@ -26,6 +26,27 @@ __global__ void Matern72_matcov_kernel(const Real* X1, int ldx1, int incx1, int 
                                           Real nugget, bool nugget_tag);
 
 template <typename Real>
+__global__ void Matern52_matcov_kernel(const Real* X1, int ldx1, int incx1, int stridex1,
+                                          const Real* X2, int ldx2, int incx2, int stridex2,
+                                          Real* C, int ldc, int n, int dim, 
+                                          Real sigma2, Real range, 
+                                          Real nugget, bool nugget_tag);
+
+template <typename Real>
+__global__ void Matern32_matcov_kernel(const Real* X1, int ldx1, int incx1, int stridex1,
+                                          const Real* X2, int ldx2, int incx2, int stridex2,
+                                          Real* C, int ldc, int n, int dim, 
+                                          Real sigma2, Real range, 
+                                          Real nugget, bool nugget_tag);
+
+template <typename Real>
+__global__ void Matern12_matcov_kernel(const Real* X1, int ldx1, int incx1, int stridex1,
+                                          const Real* X2, int ldx2, int incx2, int stridex2,
+                                          Real* C, int ldc, int n, int dim, 
+                                          Real sigma2, Real range, 
+                                          Real nugget, bool nugget_tag);
+
+template <typename Real>
 void Matern_matcov(const Real* d_X1, int ldx1, int incx1, int stridex1,
                 const Real* d_X2, int ldx2, int incx2, int stridex2,
                 Real* d_C, int ldc, int n, int dim, 
