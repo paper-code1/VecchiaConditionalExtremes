@@ -28,3 +28,5 @@ experiments/simulations/maternSimuData
 *.err
 
 src/bv-mpi.code-workspace
+ablation_study/fig/
+simulations/fig/
