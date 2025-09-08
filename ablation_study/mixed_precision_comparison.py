@@ -8,7 +8,7 @@ import warnings
 import matplotlib
 matplotlib.rcParams.update({'font.size': 14})
 
-from utils import MaternKernel, MixedPrecisionGaussianProcess, generate_circle_points
+from utils import MaternKernel, AblationGaussianProcess, generate_circle_points
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
@@ -25,11 +25,11 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
         'kernel_cross_gen': 'double', 
         'kernel_test_gen': 'double',
         'chol_train': 'double',
-        'solve_train_cross': 'double',
+        'solve_train_cross': 'double', # make sure the llh is not NaN
         'gemm_train': 'double',
         'cov_subtraction': 'double',
-        'chol_cond': 'double', 
         # Single precision operations (less critical)
+        'chol_cond': 'single',
         'solve_train_y': 'single',
         'gemv_train': 'single',
         'solve_cond': 'single',
@@ -57,7 +57,7 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
             
             # Create kernel and GP
             kernel = MaternKernel(nu=nu, length_scale=0.1/nu, variance=1.0)
-            gp = MixedPrecisionGaussianProcess(kernel, noise_variance=1e-6)
+            gp = AblationGaussianProcess(kernel, noise_variance=1e-5)
             
             # Storage for trial results
             double_ll_values = []
@@ -74,27 +74,27 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
                 # Generate spatial points and reference function
                 all_points, inner_points, outer_points = generate_circle_points(n)
                 
-                # # Generate reference function values (always double precision)
-                # y_true_all = np.random.multivariate_normal(
-                #     np.zeros(len(all_points)), 
-                #     kernel(all_points, precision='double')
-                # )
-                y_true_all = np.zeros(len(all_points))
+                # Generate reference function values (always double precision)
+                y_true_all = np.random.multivariate_normal(
+                    np.zeros(len(all_points)), 
+                    kernel(all_points, precision='double')
+                )
+                # y_true_all = np.zeros(len(all_points))
                 y_true_inner = y_true_all[:len(inner_points)]
                 y_true_outer = y_true_all[len(inner_points):len(inner_points)+len(outer_points)]
                 
                 try:
                     # Compute full double precision log-likelihood
-                    ll_double, diag_double = gp.conditional_log_likelihood_mixed(
+                    ll_double, diag_double = gp.conditional_log_likelihood_ablation(
                         outer_points, y_true_outer, inner_points, y_true_inner, full_double_config
                     )
                     
                     # Compute mixed precision log-likelihood
-                    ll_mixed, diag_mixed = gp.conditional_log_likelihood_mixed(
+                    ll_mixed, diag_mixed = gp.conditional_log_likelihood_ablation(
                         outer_points, y_true_outer, inner_points, y_true_inner, mixed_precision_config
                     )
                     
-                    if ll_double > -1e9 and ll_mixed > -1e9:  # Both succeeded
+                    if ll_double is not np.nan and ll_mixed is not np.nan:  # Both succeeded
                         double_ll_values.append(ll_double)
                         mixed_ll_values.append(ll_mixed)
                         
@@ -167,13 +167,14 @@ def visualize_mixed_precision_results(results: Dict[str, Any]):
     
     # Plot 1: Mean Log-Likelihood Difference (Line Plot)
     axes[0, 0].set_title('Mean Log-Likelihood Difference\n(|Mixed - Double|)')
-    colors = ['red', 'blue', 'green']
+    # colors = ['red', 'blue', 'green']
     for j, nu in enumerate(nu_values):
         y_values = ll_diff_matrix[:, j]
         valid_mask = ~np.isnan(y_values)
         if np.any(valid_mask):
             axes[0, 0].plot(np.array(n_values)[valid_mask], y_values[valid_mask], 
-                          'o-', color=colors[j], label=f'ν={nu}', linewidth=2, markersize=6)
+                          'o-', #color=colors[j], 
+                          label=f'ν={nu}', linewidth=2, markersize=6)
     axes[0, 0].set_xlabel('n (problem size)')
     axes[0, 0].set_ylabel('Mean LL Difference')
     axes[0, 0].set_xscale('log')
@@ -188,7 +189,8 @@ def visualize_mixed_precision_results(results: Dict[str, Any]):
         valid_mask = ~np.isnan(y_values)
         if np.any(valid_mask):
             axes[0, 1].plot(np.array(n_values)[valid_mask], y_values[valid_mask], 
-                          'o-', color=colors[j], label=f'ν={nu}', linewidth=2, markersize=6)
+                          'o-', #color=colors[j], 
+                          label=f'ν={nu}', linewidth=2, markersize=6)
     axes[0, 1].set_xlabel('n (problem size)')
     axes[0, 1].set_ylabel('Mean Relative Error')
     axes[0, 1].set_xscale('log')
@@ -270,7 +272,7 @@ def main():
     # Experimental parameters
     n_values = [10, 20, 50, 80, 100, 200, 500, 1000]
     nu_values = [0.5, 1.5, 2.5]
-    n_trials = 1
+    n_trials = 10
     
     # Run experiments
     results = run_mixed_precision_experiment(n_values, nu_values, n_trials)

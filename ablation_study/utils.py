@@ -291,70 +291,70 @@ class AblationGaussianProcess:
             diagnostics['operation_precisions'] = ops.copy()
             return np.nan, diagnostics
 
-# mimic the worst approximation, the first block in the Vecchia approximation
-def generate_circle_points(n: int, n_points: int = 600) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Generate points in circle with inner/outer regions."""
-    outer_radius = 1.0 / n
-    inner_radius = 1.0 / (n * np.sqrt(3))
-    n_inner = int(n_points / 3)
-    n_outer = n_points - n_inner
-
-    points_inner = []
-    while len(points_inner) < n_inner:
-        # Generate random points in square
-        x = np.random.uniform(-inner_radius, inner_radius)
-        y = np.random.uniform(-inner_radius, inner_radius)
-        r = np.sqrt(x**2 + y**2)
-        
-        # Keep points within outer circle
-        if r <= inner_radius:
-            points_inner.append([x, y])
-    
-    points_inner = np.array(points_inner)
-    
-    # outer points
-    points_outer = []
-    while len(points_outer) < n_outer:
-        # Generate random points in square
-        x = np.random.uniform(0.5 - outer_radius, 0.5 + outer_radius)
-        y = np.random.uniform(0.5 - outer_radius, 0.5 + outer_radius)
-        r = np.sqrt((x - 0.5)**2 + (y - 0.5)**2)
-        
-        # Keep points within outer circle
-        if r <= outer_radius:
-            points_outer.append([x, y])
-    
-    points_outer = np.array(points_outer)
-    points = np.concatenate([points_inner, points_outer], axis=0)
-    
-    return points, points_inner, points_outer
-
-# # mimic the best approximation, the end block in the Vecchia approximation
+# # mimic the worst approximation, the first block in the Vecchia approximation
 # def generate_circle_points(n: int, n_points: int = 600) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 #     """Generate points in circle with inner/outer regions."""
 #     outer_radius = 1.0 / n
 #     inner_radius = 1.0 / (n * np.sqrt(3))
-    
-#     points = []
-#     while len(points) < n_points:
+#     n_inner = int(n_points / 3)
+#     n_outer = n_points - n_inner
+
+#     points_inner = []
+#     while len(points_inner) < n_inner:
 #         # Generate random points in square
-#         x = np.random.uniform(-outer_radius, outer_radius)
-#         y = np.random.uniform(-outer_radius, outer_radius)
+#         x = np.random.uniform(-inner_radius, inner_radius)
+#         y = np.random.uniform(-inner_radius, inner_radius)
 #         r = np.sqrt(x**2 + y**2)
         
 #         # Keep points within outer circle
+#         if r <= inner_radius:
+#             points_inner.append([x, y])
+    
+#     points_inner = np.array(points_inner)
+    
+#     # outer points
+#     points_outer = []
+#     while len(points_outer) < n_outer:
+#         # Generate random points in square
+#         x = np.random.uniform(0.5 - outer_radius, 0.5 + outer_radius)
+#         y = np.random.uniform(0.5 - outer_radius, 0.5 + outer_radius)
+#         r = np.sqrt((x - 0.5)**2 + (y - 0.5)**2)
+        
+#         # Keep points within outer circle
 #         if r <= outer_radius:
-#             points.append([x, y])
+#             points_outer.append([x, y])
     
-#     points = np.array(points[:n_points])
+#     points_outer = np.array(points_outer)
+#     points = np.concatenate([points_inner, points_outer], axis=0)
     
-#     # Classify points
-#     distances = np.sqrt(points[:, 0]**2 + points[:, 1]**2)
-#     inner_mask = distances <= inner_radius
-#     outer_mask = ~inner_mask
+#     return points, points_inner, points_outer
+
+# mimic the best approximation, the end block in the Vecchia approximation
+def generate_circle_points(n: int, n_points: int = 600) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Generate points in circle with inner/outer regions."""
+    outer_radius = 1.0 / n
+    inner_radius = 1.0 / (n * np.sqrt(3))
     
-#     inner_points = points[inner_mask]
-#     outer_points = points[outer_mask]
-#     points = np.concatenate([inner_points, outer_points], axis=0)
+    points = []
+    while len(points) < n_points:
+        # Generate random points in square
+        x = np.random.uniform(-outer_radius, outer_radius)
+        y = np.random.uniform(-outer_radius, outer_radius)
+        r = np.sqrt(x**2 + y**2)
+        
+        # Keep points within outer circle
+        if r <= outer_radius:
+            points.append([x, y])
     
-#     return points, inner_points, outer_points
+    points = np.array(points[:n_points])
+    
+    # Classify points
+    distances = np.sqrt(points[:, 0]**2 + points[:, 1]**2)
+    inner_mask = distances <= inner_radius
+    outer_mask = ~inner_mask
+    
+    inner_points = points[inner_mask]
+    outer_points = points[outer_mask]
+    points = np.concatenate([inner_points, outer_points], axis=0)
+    
+    return points, inner_points, outer_points

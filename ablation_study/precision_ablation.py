@@ -180,7 +180,7 @@ def main():
     # n_values = [10, 100, 1000]  # Reduced from [10, 100, 1000]
     n_values = [10, 100, 1000]  # Reduced from [10, 100, 1000]
     nu_values = [0.5, 1.5, 2.5]  # Reduced from [0.5, 1.5, 2.5]
-    n_trials = 3  # Reduced from 10
+    n_trials = 10  # Reduced from 10
     
     all_results = []
     

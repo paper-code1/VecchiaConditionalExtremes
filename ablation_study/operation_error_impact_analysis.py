@@ -29,7 +29,8 @@ def run_ablation_experiment(n: int, nu: float, n_trials: int = 5) -> Dict[str, A
     y_true_inner = []
 
     # Reproducible
-    np.random.seed(42 + n + int(nu*10))  
+    # np.random.seed(42 + n + int(nu*10))  
+    np.random.seed(42)
     for trial in range(n_trials):
         _all_points, _inner_points, _outer_points = generate_circle_points(n)
         
@@ -80,7 +81,7 @@ def run_ablation_experiment(n: int, nu: float, n_trials: int = 5) -> Dict[str, A
             baseline_diagnostics.append(diag)
     
     if baseline_ll_values:
-        results['baseline_ll'] = np.mean(baseline_ll_values)
+        results['baseline_ll'] = np.asarray(baseline_ll_values)
         results['baseline_std'] = np.std(baseline_ll_values)
         results['baseline_cond_train'] = np.mean([d['cond_K_train'] for d in baseline_diagnostics])
         results['baseline_cond_cov'] = np.mean([d['cond_cov_matrix'] for d in baseline_diagnostics])
@@ -100,12 +101,12 @@ def run_ablation_experiment(n: int, nu: float, n_trials: int = 5) -> Dict[str, A
             ll, diag = gp.conditional_log_likelihood_ablation(
                 outer_points[trial], y_true_outer[trial], inner_points[trial], y_true_inner[trial], op_precision
             )
-            print(f"Trial {trial}, ll single: {ll}")
+            print(f"Trial {trial} op {op}, ll single: {ll}")
             if ll is np.nan:  # Failed
                 failures += 1
             else:
                 ll_values.append(ll)
-                ll_errors.append(abs(ll - results['baseline_ll']))
+                ll_errors.append(abs(ll - results['baseline_ll'][trial]))
         
         # Store results
         results['operation_results'][op] = {
@@ -176,16 +177,16 @@ def create_operation_error_impact_plots(all_results: List[Dict[str, Any]]):
                 bar.set_color(color)
         
         ax1.set_yticks(y_pos)
-        ax1.set_yticklabels(sorted_ops)
+        ax1.set_yticklabels(sorted_ops, fontsize=14)
         ax1.set_xlabel('Average Log-Likelihood Error')
-        ax1.set_title('Operations Ranked by Average Error Impact (All Parameter Combinations)', fontsize=14, fontweight='bold')
+        # ax1.set_title('Operations Ranked by Average Error Impact (All Parameter Combinations)', fontsize=14, fontweight='bold')
         ax1.set_xscale('log')
         ax1.grid(True, alpha=0.3, axis='x')
         
         # Add value labels on bars
         for i, (bar, error) in enumerate(zip(bars, errors)):
             ax1.text(error * 1.1, bar.get_y() + bar.get_height()/2, 
-                    f'{error:.2e}', va='center', fontsize=8)
+                    f'{error:.2e}', va='center', fontsize=16)
     
     # Plot 2-10: Individual plots for each parameter combination
     plot_idx = 1
@@ -231,16 +232,18 @@ def create_operation_error_impact_plots(all_results: List[Dict[str, Any]]):
                             bar.set_color(plt.cm.Reds(intensity))
                     
                     ax.set_yticks(y_pos)
-                    ax.set_yticklabels([op.replace('_', '\n') for op in local_sorted_ops], fontsize=7)
-                    ax.set_xlabel('Log-Likelihood Error', fontsize=8)
-                    ax.set_title(f'n={n}, ν={nu}', fontsize=10, fontweight='bold')
+                    # ax.set_yticklabels([op.replace('_', '\n') for op in local_sorted_ops], fontsize=7)
+                    ax.set_yticklabels(local_sorted_ops, fontsize=14)
+                    ax.set_xlabel('Log-Likelihood Error', fontsize=16)
+                    ax.set_title(f'n={n}, ν={nu}', fontsize=16)
                     ax.set_xscale('log')
+                    ax.set_xlim(1e-8, 15)
                     ax.grid(True, alpha=0.3, axis='x')
                     
                     # Add value labels on bars (only for top 3)
                     for k, (bar, error) in enumerate(zip(bars[:3], errors[:3])):
                         ax.text(error * 1.1, bar.get_y() + bar.get_height()/2, 
-                               f'{error:.1e}', va='center', fontsize=6)
+                               f'{error:.1e}', va='center', fontsize=16)
             
             plot_idx += 1
             
@@ -323,8 +326,8 @@ def create_ranking_comparison_plot(all_results: List[Dict[str, Any]]):
                 ax.text(j, i, f'{rank}', ha="center", va="center", 
                        color=color, fontweight='bold', fontsize=8)
     
-    ax.set_title('Operation Error Impact Rankings Across Parameter Combinations\n(1 = Highest Error Impact)', 
-                fontsize=14, fontweight='bold')
+    # ax.set_title('Operation Error Impact Rankings Across Parameter Combinations\n(1 = Highest Error Impact)', 
+    #             fontsize=14, fontweight='bold')
     ax.set_xlabel('Parameter Combinations')
     ax.set_ylabel('Operations')
     
@@ -343,7 +346,7 @@ def main():
     # Experimental parameters
     n_values = [10, 100, 1000]
     nu_values = [0.5, 1.5, 2.5]
-    n_trials = 1
+    n_trials = 10
     
     all_results = []
     
@@ -372,8 +375,8 @@ def main():
     
     # Plot 1: Detailed operation error impact plots
     fig1 = create_operation_error_impact_plots(all_results)
-    fig1.suptitle('Operations Ranked by Average Error Impact - Detailed Analysis', 
-                 fontsize=16, fontweight='bold', y=0.98)
+    # fig1.suptitle('Operations Ranked by Average Error Impact - Detailed Analysis', 
+    #              fontsize=16, fontweight='bold', y=0.98)
     
     # Save the first plot
     filename1 = './fig/operation_error_impact_detailed.pdf'
@@ -397,9 +400,11 @@ def main():
     print("=" * 70)
     
     operations = [
-        'chol_train', 'solve_train_forward', 'solve_cross_forward', 'train_gemm',
-        'cond_cov_gemm', 'cond_cov_subtraction', 'chol_cond', 
-        'solve_cond_forward', 'log_diag', 'quad_form_solve'
+        'kernel_train_gen', 'kernel_test_gen', 'kernel_cross_gen',
+        'chol_train', 'solve_train_y', 'gemv_train', 
+        'solve_train_cross',
+        'gemm_train', 'cov_subtraction',
+        'chol_cond', 'solve_cond', 'log_diag', 'inner_product'
     ]
     
     # Overall ranking analysis
