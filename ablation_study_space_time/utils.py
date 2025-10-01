@@ -3,12 +3,15 @@ import scipy.spatial.distance as spdist
 import warnings
 import matplotlib
 import matplotlib.pyplot as plt
+import json
+from datetime import datetime
+from pathlib import Path
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.special import gamma, kv
 from scipy.linalg import cholesky, solve_triangular
 from scipy.interpolate import griddata
 
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any, List, Optional, Union
 matplotlib.rcParams.update({'font.size': 18})
 
 # Suppress warnings for cleaner output
@@ -63,16 +66,98 @@ class MaternKernel:
             
         return K.astype(dtype)
 
+
+class MaternKernelHighDimTime:
+    """
+    Matern kernel implementation with different 
+    smoothness parameters for high-dimensional time-series data.
+    """
+    
+    def __init__(self, nu_space: float, nu_time: float, variance: float = 1.0,
+                 length_scale: float = [0.05, 0.05, 0.05, 5, 5, 5, 5, 5, 5, 5],
+                 length_dim: int = 10,
+                 time_scale: float = 1.0,
+                 time_lag: int = 2,
+                 seperablity: float = 0.0):
+        assert len(length_scale) == length_dim, "length_scale must be a list of length length_dim"
+
+        self.nu_space = nu_space
+        self.nu_time = nu_time
+        self.length_scale = np.array(length_scale)
+        self.variance = variance
+        self.length_dim = length_dim
+        self.time_scale = time_scale
+        self.time_lag = time_lag
+        self.seperablity = seperablity
+        
+    def __call__(self, 
+                 X1: np.ndarray, 
+                 X2: np.ndarray = None, 
+                 precision: str = 'double') -> np.ndarray:
+        """Compute Matern kernel matrix with specified precision."""
+        if X2 is None:
+            X2 = X1
+            
+        # Set precision for computation
+        dtype = np.float64 if precision == 'double' else np.float32
+        X1_space = X1.astype(dtype)[:, :self.length_dim] / self.length_scale
+        X2_space = X2.astype(dtype)[:, :self.length_dim] / self.length_scale
+        X1_time = X1.astype(dtype)[:, self.length_dim].reshape(-1, 1)
+        X2_time = X2.astype(dtype)[:, self.length_dim].reshape(-1, 1)
+        
+        # Compute pairwise distances
+        dists_space = spdist.cdist(X1_space, X2_space, metric='euclidean').astype(dtype)
+        dists_time = spdist.cdist(X1_time, X2_time, metric='euclidean').astype(dtype)
+        
+        # Avoid division by zero
+        # dists = np.maximum(dists, np.finfo(dtype).eps)
+        
+        # Scaled distances
+        scaled_dists_space = dists_space
+        scaled_dists_time = np.power(np.abs(dists_time), self.nu_time * 2) \
+            / self.time_scale + 1
+        scaled_combined_dist = scaled_dists_space / \
+            np.power(scaled_dists_time, self.seperablity/2)
+        
+        if self.nu_space == 0.5:
+            # Exponential kernel (Matern with nu=0.5)
+            _item_poly = 1.0
+        elif self.nu_space == 1.5:
+            _item_poly = 1.0 + scaled_combined_dist
+        elif self.nu_space == 2.5:
+            _item_poly = 1.0 + scaled_combined_dist + scaled_combined_dist**2 / 3
+        elif self.nu_space == 3.5:
+            _item_poly = 1.0 + scaled_combined_dist + 2 * scaled_combined_dist**2 / 5 +\
+                scaled_combined_dist**3 / 15
+        else:
+            raise ValueError(f"Matern kernel with nu={self.nu_space} is not supported")
+            # # General Matern kernel
+            # scaled_dists = np.maximum(scaled_dists, np.finfo(dtype).eps)
+            # temp = (2**(1-self.nu)) / gamma(self.nu)
+            # K = self.variance * temp * (scaled_dists**self.nu) * kv(self.nu, scaled_dists)
+        # matern kernel
+        K = self.variance * _item_poly * np.exp(-scaled_combined_dist)    
+        # time fixed
+        K = K / scaled_dists_time
+        
+        # Set diagonal to variance (avoid numerical issues)
+        if X1.shape == X2.shape and np.allclose(X1.astype(np.float64), X2.astype(np.float64)):
+            np.fill_diagonal(K, self.variance)
+            
+        return K.astype(dtype)
+
+
 class AblationGaussianProcess:
     """Gaussian Process with ablation study capabilities for precision effects."""
     
-    def __init__(self, kernel: MaternKernel, noise_variance: float = 1e-6):
+    def __init__(self, kernel: MaternKernel, noise_variance: float = 1e-5):
         self.kernel = kernel
         self.noise_variance = noise_variance
         
-    def conditional_log_likelihood_ablation(self, X_train: np.ndarray, y_train: np.ndarray,
-                                          X_test: np.ndarray, y_test: np.ndarray,
-                                          operation_precision: Dict[str, str]) -> Tuple[float, Dict[str, Any]]:
+    def conditional_log_likelihood_ablation(self, 
+                                            X_train: np.ndarray, y_train: np.ndarray,
+                                            X_test: np.ndarray, y_test: np.ndarray,
+                                            operation_precision: Dict[str, str]) -> Tuple[float, Dict[str, Any]]:
         """
         Compute conditional log-likelihood with selective precision for atomic operations.
         
@@ -296,108 +381,198 @@ class AblationGaussianProcess:
 
 
 # mimic the best/good/worst approximation, the end block in the Vecchia approximation
-def generate_circle_points(n: int, n_points: int = 600, quality: str = 'best') -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def generate_circle_points(n: int, n_points: int = 300, 
+                           quality: str = 'best', 
+                           time_lag: int = 2,
+                           dim_length: int = 10) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Generate points in circle with inner/outer regions."""
     outer_radius = 1.0 / n
-    inner_radius = 1.0 / (n * np.sqrt(3))
+    inner_radius = 1.0 / (n * np.power(3, 1/dim_length))
     
     points = []
     while len(points) < n_points:
         # Generate random points in square
-        x = np.random.uniform(-outer_radius, outer_radius)
-        y = np.random.uniform(-outer_radius, outer_radius)
-        r = np.sqrt(x**2 + y**2)
+        x = np.zeros(dim_length)
+        for i in range(dim_length):
+            x[i] = np.random.uniform(-outer_radius, outer_radius)
+        
+        r = np.sqrt(np.sum(x**2))
         
         # Keep points within outer circle
         if r <= outer_radius:
-            points.append([x, y])
+            points.append(x)
     
     points = np.array(points[:n_points])
-    
+
     # Classify points
-    distances = np.sqrt(points[:, 0]**2 + points[:, 1]**2)
+    distances = np.sqrt(np.sum(points**2, axis=1))
     inner_mask = distances <= inner_radius
     outer_mask = ~inner_mask
     
-    inner_points = points[inner_mask]
-    outer_points = points[outer_mask]
+    # inner and outer points are only spatial points; need to add time as the last column.
+    # time_lag: how many time tags, each time has the same spatial points
+
+    inner_points_spatial = points[inner_mask]
+    outer_points_spatial = points[outer_mask]
     
+    print(f"Generated {len(points)} total points:")
+    print(f"  - Inner region: {len(inner_points_spatial)} points")
+    print(f"  - Outer region: {len(outer_points_spatial)} points")
+
     if quality == 'good':
         # mimic the good approximation, to expand the outer nearest points
-        outer_points = outer_points * np.sqrt(n)
+        outer_points_spatial = outer_points_spatial * np.sqrt(n)
     elif quality == 'worst':
         # mimic the worst approximation, to shrink the outer nearest points, do a shift
-        outer_points = outer_points + 0.5
-    
+        outer_points_spatial = outer_points_spatial + 0.5
+
+    # For each time tag, repeat the spatial points and append the time as the last column
+    def add_time_tags(spatial_points, time_lag):
+        n_points = spatial_points.shape[0]
+        # Repeat for each time tag
+        all_points = []
+        for t in range(time_lag):
+            time_col = np.full((n_points, 1), t, dtype=np.float64)
+            points_with_time = np.hstack([spatial_points, time_col])
+            all_points.append(points_with_time)
+        return np.vstack(all_points)
+
+    # Only keep inner_points with t = time_lag - 1, rest go to outer_points
+    all_inner_points = add_time_tags(inner_points_spatial, time_lag)
+    all_outer_points = add_time_tags(outer_points_spatial, time_lag)
+    # Split inner_points: keep only those with t = time_lag - 1
+    inner_points = all_inner_points[all_inner_points[:, -1] == (time_lag - 1)]
+    # The rest of inner_points (t < time_lag - 1) are added to outer_points
+    extra_outer_points = all_inner_points[all_inner_points[:, -1] < (time_lag - 1)]
+    # Combine original outer_points and extra_outer_points
+    outer_points = np.vstack([all_outer_points, extra_outer_points])
+
+    # Concatenate all points (inner first, then outer)
     points = np.concatenate([inner_points, outer_points], axis=0)
     
+    print(f"Generated {len(points)} total points:")
+    print(f"  - Inner region: {len(inner_points)} points")
+    print(f"  - Outer region: {len(outer_points)} points")
+
     return points, inner_points, outer_points
 
-def plot_simple_spatial_function(inner_points: np.ndarray, outer_points: np.ndarray,
-                                 y_true_inner: np.ndarray, y_true_outer: np.ndarray,
-                                 title: str = "Gaussian Process Function Values",
-                                 save_path: str = None, figsize: Tuple[int, int] = (10, 8)) -> plt.Figure:
+PathLike = Union[str, Path]
+DEFAULT_RESULTS_ROOT = Path(__file__).resolve().parent / "results"
+
+
+def _to_serialisable(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {str(key): _to_serialisable(value) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_serialisable(item) for item in obj]
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (np.generic,)):
+        return obj.item()
+    return obj
+
+
+def sanitise_filename_component(value: Any) -> str:
+    if isinstance(value, float):
+        value_str = f"{value:.3g}"
+    elif isinstance(value, (list, tuple)):
+        value_str = "-".join(sanitise_filename_component(v) for v in value[:4])
+        if len(value) > 4:
+            value_str += "-etc"
+    else:
+        value_str = str(value)
+
+    cleaned = [ch.lower() if ch.isalnum() else '_' for ch in value_str]
+    cleaned_str = ''.join(cleaned).strip('_')
+    return cleaned_str or "value"
+
+
+def format_experiment_filename(prefix: str, params: Dict[str, Any], suffix: str = ".json") -> str:
+    parts = [prefix]
+    for key in sorted(params.keys()):
+        value = params[key]
+        if value is None:
+            continue
+        parts.append(f"{key}-{sanitise_filename_component(value)}")
+    filename = "_".join(parts)
+    return f"{filename}{suffix}"
+
+
+def prepare_results_dir(
+    experiment_name: str,
+    root: Optional[PathLike] = None,
+    timestamp: bool = True,
+    subdirs: Optional[List[str]] = None,
+) -> Dict[str, Path]:
+    root_path = Path(root).expanduser() if root is not None else DEFAULT_RESULTS_ROOT
+    experiment_root = root_path / experiment_name
+
+    run_dir = experiment_root
+    if timestamp:
+        run_dir = experiment_root / datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    paths: Dict[str, Path] = {'root': run_dir}
+    for subdir in subdirs or []:
+        sub_path = run_dir / subdir
+        sub_path.mkdir(parents=True, exist_ok=True)
+        paths[subdir] = sub_path
+
+    return paths
+
+
+def save_json(data: Any, destination: PathLike) -> None:
+    destination_path = Path(destination).expanduser()
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with destination_path.open('w', encoding='utf-8') as fp:
+        json.dump(_to_serialisable(data), fp, indent=2, sort_keys=True)
+
+
+def write_text_report(lines: List[str], destination: PathLike) -> None:
+    destination_path = Path(destination).expanduser()
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    destination_path.write_text("\n".join(lines), encoding='utf-8')
+
+
+def load_json(source: PathLike) -> Any:
+    """Load JSON data from a file."""
+    source_path = Path(source).expanduser()
+    with source_path.open('r', encoding='utf-8') as fp:
+        return json.load(fp)
+
+
+def load_all_experiment_results(results_dir: PathLike) -> List[Dict[str, Any]]:
     """
-    Create a simple but beautiful scatter plot of spatial function values.
+    Load all experiment result files from a results directory.
     
     Args:
-        inner_points: Array of inner region coordinates (N_inner x 2)
-        outer_points: Array of outer region coordinates (N_outer x 2) 
-        y_true_inner: Function values at inner points (N_inner,)
-        y_true_outer: Function values at outer points (N_outer,)
-        title: Plot title
-        save_path: Optional path to save the figure
-        figsize: Figure size tuple
-        
+        results_dir: Path to the directory containing JSON result files
+    
     Returns:
-        matplotlib Figure object
+        List of all loaded experiment results
     """
+    results_path = Path(results_dir).expanduser()
+    all_results = []
     
-    fig, ax = plt.subplots(figsize=figsize)
+    # Look for JSON files in data subdirectory first, then in root
+    search_dirs = [results_path / 'data', results_path]
     
-    # Combine values to get global color scale
-    all_values = np.concatenate([y_true_inner, y_true_outer])
-    vmin, vmax = all_values.min(), all_values.max()
+    for search_dir in search_dirs:
+        if search_dir.exists():
+            json_files = list(search_dir.glob('*.json'))
+            for json_file in json_files:
+                if 'llh_error_ablation' in json_file.name:
+                    try:
+                        result = load_json(json_file)
+                        if isinstance(result, dict) and 'n' in result and 'nu' in result:
+                            all_results.append(result)
+                        elif isinstance(result, list):
+                            # Handle case where JSON contains a list of results
+                            all_results.extend([r for r in result if isinstance(r, dict) and 'n' in r and 'nu' in r])
+                    except Exception as e:
+                        print(f"Warning: Could not load {json_file}: {e}")
     
-    # Plot inner points with circles
-    scatter_inner = ax.scatter(inner_points[:, 0], inner_points[:, 1], 
-                              c=y_true_inner, s=200, alpha=0.8,
-                              cmap='viridis', marker='o', 
-                              edgecolors='white', linewidth=2,
-                              vmin=vmin, vmax=vmax,
-                              label=f'Inner Region (n={len(inner_points)})')
-    
-    # Plot outer points with triangles
-    scatter_outer = ax.scatter(outer_points[:, 0], outer_points[:, 1],
-                              c=y_true_outer, s=150, alpha=0.8,
-                              cmap='viridis', marker='x',
-                              edgecolors='white', linewidth=2,
-                              vmin=vmin, vmax=vmax,
-                              label=f'Outer Region (n={len(outer_points)})')
-    
-    # Add colorbar
-    cbar = plt.colorbar(scatter_inner, ax=ax, shrink=0.8, pad=0.02)
-    cbar.set_label('Observation Value', fontsize=18)
-    
-    # Customize plot
-    ax.set_xlabel('X Coordinate', fontsize=18)
-    ax.set_ylabel('Y Coordinate', fontsize=18)
-    # ax.set_title(title, fontsize=18, fontweight='bold')
-    ax.legend(loc='best', fontsize=18)
-    ax.grid(True, alpha=0.3)
-    ax.set_aspect('equal')
-    
-    # Make it pretty
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_linewidth(1.5)
-    ax.spines['bottom'].set_linewidth(1.5)
-    
-    plt.tight_layout()
-    
-    # Save if requested
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
-        print(f"Plot saved to: {save_path}")
-    
-    return fig
+    print(f"Loaded {len(all_results)} experiment results from {results_dir}")
+    return all_results

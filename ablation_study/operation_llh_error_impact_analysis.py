@@ -12,7 +12,7 @@ from utils import MaternKernel, AblationGaussianProcess, generate_circle_points
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
 
-def run_ablation_experiment(n: int, nu: float, n_trials: int = 5) -> Dict[str, Any]:
+def run_ablation_experiment(n: int, nu: float, n_trials: int = 5, quality: str = 'best') -> Dict[str, Any]:
     """Run ablation study for specific n and nu values."""
     print(f"Running experiment: n={n}, ν={nu}")
     
@@ -32,7 +32,7 @@ def run_ablation_experiment(n: int, nu: float, n_trials: int = 5) -> Dict[str, A
     # np.random.seed(42 + n + int(nu*10))  
     np.random.seed(42)
     for trial in range(n_trials):
-        _all_points, _inner_points, _outer_points = generate_circle_points(n)
+        _all_points, _inner_points, _outer_points = generate_circle_points(n, quality=quality)
         
         # Generate reference function values (always double precision)
         _y_true_all = np.random.multivariate_normal(
@@ -237,7 +237,7 @@ def create_operation_error_impact_plots(all_results: List[Dict[str, Any]]):
                     ax.set_xlabel('Log-Likelihood Error', fontsize=16)
                     ax.set_title(f'n={n}, ν={nu}', fontsize=16)
                     ax.set_xscale('log')
-                    ax.set_xlim(1e-8, 15)
+                    ax.set_xlim(1e-8, 1e2)
                     ax.grid(True, alpha=0.3, axis='x')
                     
                     # Add value labels on bars (only for top 3)
@@ -309,7 +309,7 @@ def create_ranking_comparison_plot(all_results: List[Dict[str, Any]]):
     fig, ax = plt.subplots(figsize=(16, 10))
     
     # Create heatmap
-    im = ax.imshow(ranking_matrix, cmap='RdYlBu_r', aspect='auto', vmin=1, vmax=len(operations))
+    im = ax.imshow(ranking_matrix, cmap='RdYlBu', aspect='auto', vmin=1, vmax=len(operations))
     
     # Set ticks and labels
     ax.set_xticks(range(len(combination_labels)))
@@ -324,7 +324,7 @@ def create_ranking_comparison_plot(all_results: List[Dict[str, Any]]):
                 rank = int(ranking_matrix[i, j])
                 color = 'white' if rank <= 3 else 'black'
                 ax.text(j, i, f'{rank}', ha="center", va="center", 
-                       color=color, fontweight='bold', fontsize=8)
+                       color=color, fontweight='bold', fontsize=14)
     
     # ax.set_title('Operation Error Impact Rankings Across Parameter Combinations\n(1 = Highest Error Impact)', 
     #             fontsize=14, fontweight='bold')
@@ -344,6 +344,7 @@ def main():
     print("=" * 70)
     
     # Experimental parameters
+    n_quality = ['best', 'good', 'worst']  # best: the best approximation, good: the good approximation, worst: the worst approximation
     n_values = [10, 100, 1000]
     nu_values = [0.5, 1.5, 2.5]
     n_trials = 10
@@ -351,132 +352,132 @@ def main():
     all_results = []
     
     # Run experiments
-    total_experiments = len(n_values) * len(nu_values)
+    total_experiments = len(n_values) * len(nu_values) * len(n_quality)
     exp_count = 0
     
-    for n in n_values:
-        for nu in nu_values:
-            exp_count += 1
-            print(f"\nExperiment {exp_count}/{total_experiments}")
+    for quality in n_quality:
+        for n in n_values:
+            for nu in nu_values:
+                exp_count += 1
+                print(f"\nExperiment {exp_count}/{total_experiments}")
+                
+                try:
+                    result = run_ablation_experiment(n, nu, n_trials, quality)
+                    # if result['baseline_ll'] is not None:  # Only keep successful results
+                    #     all_results.append(result)
+                    all_results.append(result)
+                except Exception as e:
+                    print(f"Error in experiment n={n}, nu={nu}: {e}")
+                    continue
+    
+        print(f"\nSuccessfully completed {len(all_results)} experiments")
+    
+        # Create visualizations
+        print("\nCreating error impact visualizations...")
+    
+        # Plot 1: Detailed operation error impact plots
+        fig1 = create_operation_error_impact_plots(all_results)
+        # fig1.suptitle('Operations Ranked by Average Error Impact - Detailed Analysis', 
+        #              fontsize=16, fontweight='bold', y=0.98)
+        
+        # Save the first plot
+        filename1 = f'./fig/operation_error_impact_detailed_{quality}.pdf'
+        plt.figure(fig1.number)
+        plt.savefig(filename1, dpi=300, bbox_inches='tight')
+        print(f"Saved detailed analysis to: {filename1}")
+        
+        # Plot 2: Ranking comparison plot
+        if len(all_results) >= 2:  # Need at least 2 combinations for comparison
+            fig2 = create_ranking_comparison_plot(all_results)
             
-            try:
-                result = run_ablation_experiment(n, nu, n_trials)
-                # if result['baseline_ll'] is not None:  # Only keep successful results
-                #     all_results.append(result)
-                all_results.append(result)
-            except Exception as e:
-                print(f"Error in experiment n={n}, nu={nu}: {e}")
-                continue
-    
-    print(f"\nSuccessfully completed {len(all_results)} experiments")
-    
-    # Create visualizations
-    print("\nCreating error impact visualizations...")
-    
-    # Plot 1: Detailed operation error impact plots
-    fig1 = create_operation_error_impact_plots(all_results)
-    # fig1.suptitle('Operations Ranked by Average Error Impact - Detailed Analysis', 
-    #              fontsize=16, fontweight='bold', y=0.98)
-    
-    # Save the first plot
-    filename1 = './fig/operation_error_impact_detailed.pdf'
-    plt.figure(fig1.number)
-    plt.savefig(filename1, dpi=300, bbox_inches='tight')
-    print(f"Saved detailed analysis to: {filename1}")
-    
-    # Plot 2: Ranking comparison plot
-    if len(all_results) >= 2:  # Need at least 2 combinations for comparison
-        fig2 = create_ranking_comparison_plot(all_results)
+            # Save the second plot
+            filename2 = f'./fig/operation_ranking_comparison_{quality}.pdf'
+            plt.figure(fig2.number)
+            plt.savefig(filename2, dpi=300, bbox_inches='tight')
+            print(f"Saved ranking comparison to: {filename2}")
         
-        # Save the second plot
-        filename2 = './fig/operation_ranking_comparison.pdf'
-        plt.figure(fig2.number)
-        plt.savefig(filename2, dpi=300, bbox_inches='tight')
-        print(f"Saved ranking comparison to: {filename2}")
-    
-    # Print summary analysis
-    print("\n" + "=" * 70)
-    print("OPERATION ERROR IMPACT SUMMARY")
-    print("=" * 70)
-    
-    operations = [
-        'kernel_train_gen', 'kernel_test_gen', 'kernel_cross_gen',
-        'chol_train', 'solve_train_y', 'gemv_train', 
-        'solve_train_cross',
-        'gemm_train', 'cov_subtraction',
-        'chol_cond', 'solve_cond', 'log_diag', 'inner_product'
-    ]
-    
-    # Overall ranking analysis
-    overall_errors = {}
-    for op in operations:
-        errors = []
-        for result in all_results:
-            if op in result.get('operation_results', {}):
-                error = result['operation_results'][op]['mean_ll_error']
-                if not np.isnan(error):
-                    errors.append(error)
-        overall_errors[op] = np.mean(errors) if errors else 0
-    
-    sorted_ops_overall = sorted(operations, key=lambda x: overall_errors[x], reverse=True)
-    
-    print("\nOVERALL OPERATION RANKING (by average error impact):")
-    print("-" * 50)
-    for i, op in enumerate(sorted_ops_overall, 1):
-        avg_error = overall_errors[op]
-        print(f"{i:2d}. {op:20s}: {avg_error:.2e}")
-    
-    # Parameter-specific analysis
-    print(f"\nPARAMETER-SPECIFIC INSIGHTS:")
-    print("-" * 30)
-    
-    for nu in sorted(set(r['nu'] for r in all_results)):
-        print(f"\nKernel smoothness ν = {nu}:")
-        nu_results = [r for r in all_results if r['nu'] == nu]
+        # Print summary analysis
+        print("\n" + "=" * 70)
+        print("OPERATION ERROR IMPACT SUMMARY")
+        print("=" * 70)
         
-        # Find most critical operation for this nu
-        nu_errors = {}
+        operations = [
+            'kernel_train_gen', 'kernel_test_gen', 'kernel_cross_gen',
+            'chol_train', 'solve_train_y', 'gemv_train', 
+            'solve_train_cross', 'gemm_train', 
+            'cov_subtraction',
+            'chol_cond', 'solve_cond', 'log_diag', 'inner_product'
+        ]
+        
+        # Overall ranking analysis
+        overall_errors = {}
         for op in operations:
             errors = []
-            for result in nu_results:
+            for result in all_results:
                 if op in result.get('operation_results', {}):
                     error = result['operation_results'][op]['mean_ll_error']
                     if not np.isnan(error):
                         errors.append(error)
-            nu_errors[op] = np.mean(errors) if errors else 0
+            overall_errors[op] = np.mean(errors) if errors else 0
         
-        if nu_errors:
-            most_critical = max(nu_errors.keys(), key=lambda x: nu_errors[x])
-            print(f"  Most critical operation: {most_critical}")
-            print(f"  Average error: {nu_errors[most_critical]:.2e}")
-    
-    for n in sorted(set(r['n'] for r in all_results)):
-        print(f"\nScale parameter n = {n}:")
-        n_results = [r for r in all_results if r['n'] == n]
+        sorted_ops_overall = sorted(operations, key=lambda x: overall_errors[x], reverse=True)
         
-        # Find most critical operation for this n
-        n_errors = {}
-        for op in operations:
-            errors = []
-            for result in n_results:
-                if op in result.get('operation_results', {}):
-                    error = result['operation_results'][op]['mean_ll_error']
-                    if not np.isnan(error):
-                        errors.append(error)
-            n_errors[op] = np.mean(errors) if errors else 0
+        print("\nOVERALL OPERATION RANKING (by average error impact):")
+        print("-" * 50)
+        for i, op in enumerate(sorted_ops_overall, 1):
+            avg_error = overall_errors[op]
+            print(f"{i:2d}. {op:20s}: {avg_error:.2e}")
         
-        if n_errors:
-            most_critical = max(n_errors.keys(), key=lambda x: n_errors[x])
-            print(f"  Most critical operation: {most_critical}")
-            print(f"  Average error: {n_errors[most_critical]:.2e}")
+        # Parameter-specific analysis
+        print(f"\nPARAMETER-SPECIFIC INSIGHTS:")
+        print("-" * 30)
+        
+        for nu in sorted(set(r['nu'] for r in all_results)):
+            print(f"\nKernel smoothness ν = {nu}:")
+            nu_results = [r for r in all_results if r['nu'] == nu]
+            
+            # Find most critical operation for this nu
+            nu_errors = {}
+            for op in operations:
+                errors = []
+                for result in nu_results:
+                    if op in result.get('operation_results', {}):
+                        error = result['operation_results'][op]['mean_ll_error']
+                        if not np.isnan(error):
+                            errors.append(error)
+                nu_errors[op] = np.mean(errors) if errors else 0
+            
+            if nu_errors:
+                most_critical = max(nu_errors.keys(), key=lambda x: nu_errors[x])
+                print(f"  Most critical operation: {most_critical}")
+                print(f"  Average error: {nu_errors[most_critical]:.2e}")
+        
+        for n in sorted(set(r['n'] for r in all_results)):
+            print(f"\nScale parameter n = {n}:")
+            n_results = [r for r in all_results if r['n'] == n]
+            
+            # Find most critical operation for this n
+            n_errors = {}
+            for op in operations:
+                errors = []
+                for result in n_results:
+                    if op in result.get('operation_results', {}):
+                        error = result['operation_results'][op]['mean_ll_error']
+                        if not np.isnan(error):
+                            errors.append(error)
+                n_errors[op] = np.mean(errors) if errors else 0
+            
+            if n_errors:
+                most_critical = max(n_errors.keys(), key=lambda x: n_errors[x])
+                print(f"  Most critical operation: {most_critical}")
+                print(f"  Average error: {n_errors[most_critical]:.2e}")
+        
+        # Don't show plots in headless environment
+        # plt.show()
+        print("\nAll visualizations completed successfully!")
     
-    # Don't show plots in headless environment
-    # plt.show()
-    print("\nAll visualizations completed successfully!")
-    
-    return all_results
 
 if __name__ == "__main__":
     # Set random seed for reproducibility
     np.random.seed(42)
-    results = main()
+    main()

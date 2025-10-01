@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
 import time
 from typing import Tuple, Dict, Any, List
 import warnings
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
+matplotlib.rcParams.update({'font.size': 16})
 
 from utils import MaternKernel, AblationGaussianProcess, generate_circle_points
 
@@ -21,10 +22,10 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
     # Define the specific mixed precision configuration
     mixed_precision_config = {
         # Double precision operations (critical for accuracy)
-        'kernel_train_gen': 'double',
+        'kernel_train_gen': 'single',
         'kernel_cross_gen': 'double', 
         'kernel_test_gen': 'double',
-        'chol_train': 'double',
+        'chol_train': 'single',
         'solve_train_cross': 'double', # make sure the llh is not NaN
         'gemm_train': 'double',
         'cov_subtraction': 'double',
@@ -64,6 +65,8 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
             mixed_ll_values = []
             ll_differences = []
             relative_errors = []
+            double_times = []
+            mixed_times = []
             
             # Generate data for trials
             np.random.seed(42 + n + int(nu*10))  # Reproducible
@@ -84,19 +87,25 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
                 y_true_outer = y_true_all[len(inner_points):len(inner_points)+len(outer_points)]
                 
                 try:
-                    # Compute full double precision log-likelihood
+                    # Compute full double precision log-likelihood with timing
+                    start_time = time.time()
                     ll_double, diag_double = gp.conditional_log_likelihood_ablation(
                         outer_points, y_true_outer, inner_points, y_true_inner, full_double_config
                     )
+                    double_time = time.time() - start_time
                     
-                    # Compute mixed precision log-likelihood
+                    # Compute mixed precision log-likelihood with timing
+                    start_time = time.time()
                     ll_mixed, diag_mixed = gp.conditional_log_likelihood_ablation(
                         outer_points, y_true_outer, inner_points, y_true_inner, mixed_precision_config
                     )
+                    mixed_time = time.time() - start_time
                     
                     if ll_double is not np.nan and ll_mixed is not np.nan:  # Both succeeded
                         double_ll_values.append(ll_double)
                         mixed_ll_values.append(ll_mixed)
+                        double_times.append(double_time)
+                        mixed_times.append(mixed_time)
                         
                         ll_diff = abs(ll_mixed - ll_double)
                         ll_differences.append(ll_diff)
@@ -104,7 +113,8 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
                         rel_error = ll_diff / abs(ll_double) if abs(ll_double) > 1e-12 else 0
                         relative_errors.append(rel_error)
                         
-                        print(f" ✓ (diff: {ll_diff:.2e})")
+                        speedup = double_time / mixed_time if mixed_time > 0 else np.nan
+                        print(f" ✓ (diff: {ll_diff:.2e}, speedup: {speedup:.2f}x)")
                     else:
                         print(f" ✗ (failed)")
                         
@@ -127,13 +137,21 @@ def run_mixed_precision_experiment(n_values: List[int], nu_values: List[float], 
                 'max_ll_difference': np.max(ll_differences) if ll_differences else np.nan,
                 'mean_relative_error': np.mean(relative_errors) if relative_errors else np.nan,
                 'max_relative_error': np.max(relative_errors) if relative_errors else np.nan,
-                'success_rate': len(double_ll_values) / n_trials * 100
+                'success_rate': len(double_ll_values) / n_trials * 100,
+                # Timing statistics
+                'double_time_mean': np.mean(double_times) if double_times else np.nan,
+                'double_time_std': np.std(double_times) if double_times else np.nan,
+                'mixed_time_mean': np.mean(mixed_times) if mixed_times else np.nan,
+                'mixed_time_std': np.std(mixed_times) if mixed_times else np.nan,
+                'speedup_mean': np.mean([dt/mt for dt, mt in zip(double_times, mixed_times) if mt > 0]) if double_times and mixed_times else np.nan,
+                'speedup_std': np.std([dt/mt for dt, mt in zip(double_times, mixed_times) if mt > 0]) if double_times and mixed_times else np.nan
             }
             
             results['experiments'].append(experiment_result)
             
             print(f"  Results: Mean LL diff = {experiment_result['mean_ll_difference']:.2e}, "
-                  f"Mean rel error = {experiment_result['mean_relative_error']:.2e}")
+                  f"Mean rel error = {experiment_result['mean_relative_error']:.2e}, "
+                  f"Mean speedup = {experiment_result['speedup_mean']:.2f}x")
     
     return results
 
@@ -144,10 +162,6 @@ def visualize_mixed_precision_results(results: Dict[str, Any]):
     n_values = results['n_values']
     nu_values = results['nu_values']
     
-    # Create figure with multiple subplots
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle('Mixed Precision vs Full Double Precision Comparison', fontsize=16)
-    
     # Prepare data matrices
     n_n = len(n_values)
     n_nu = len(nu_values)
@@ -156,6 +170,9 @@ def visualize_mixed_precision_results(results: Dict[str, Any]):
     rel_error_matrix = np.full((n_n, n_nu), np.nan)
     success_matrix = np.full((n_n, n_nu), np.nan)
     max_error_matrix = np.full((n_n, n_nu), np.nan)
+    speedup_matrix = np.full((n_n, n_nu), np.nan)
+    double_time_matrix = np.full((n_n, n_nu), np.nan)
+    mixed_time_matrix = np.full((n_n, n_nu), np.nan)
     
     for exp in experiments:
         i = n_values.index(exp['n'])
@@ -164,76 +181,72 @@ def visualize_mixed_precision_results(results: Dict[str, Any]):
         rel_error_matrix[i, j] = exp['mean_relative_error']
         success_matrix[i, j] = exp['success_rate']
         max_error_matrix[i, j] = exp['max_ll_difference']
+        speedup_matrix[i, j] = exp['speedup_mean']
+        double_time_matrix[i, j] = exp['double_time_mean']
+        mixed_time_matrix[i, j] = exp['mixed_time_mean']
     
-    # Plot 1: Mean Log-Likelihood Difference (Line Plot)
-    axes[0, 0].set_title('Mean Log-Likelihood Difference\n(|Mixed - Double|)')
-    # colors = ['red', 'blue', 'green']
-    for j, nu in enumerate(nu_values):
-        y_values = ll_diff_matrix[:, j]
-        valid_mask = ~np.isnan(y_values)
-        if np.any(valid_mask):
-            axes[0, 0].plot(np.array(n_values)[valid_mask], y_values[valid_mask], 
-                          'o-', #color=colors[j], 
-                          label=f'ν={nu}', linewidth=2, markersize=6)
-    axes[0, 0].set_xlabel('n (problem size)')
-    axes[0, 0].set_ylabel('Mean LL Difference')
-    axes[0, 0].set_xscale('log')
-    axes[0, 0].set_yscale('log')
-    axes[0, 0].legend()
-    axes[0, 0].grid(True, alpha=0.3)
-    
-    # Plot 2: Mean Relative Error (Line Plot)
-    axes[0, 1].set_title('Mean Relative Error\n(|Mixed - Double| / |Double|)')
-    for j, nu in enumerate(nu_values):
-        y_values = rel_error_matrix[:, j]
-        valid_mask = ~np.isnan(y_values)
-        if np.any(valid_mask):
-            axes[0, 1].plot(np.array(n_values)[valid_mask], y_values[valid_mask], 
-                          'o-', #color=colors[j], 
-                          label=f'ν={nu}', linewidth=2, markersize=6)
-    axes[0, 1].set_xlabel('n (problem size)')
-    axes[0, 1].set_ylabel('Mean Relative Error')
-    axes[0, 1].set_xscale('log')
-    axes[0, 1].set_yscale('log')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # Plot 3: Success Rate
-    im3 = axes[1, 0].imshow(success_matrix, cmap='RdYlGn', aspect='auto', vmin=0, vmax=100)
-    axes[1, 0].set_title('Success Rate (%)')
-    axes[1, 0].set_xticks(range(n_nu))
-    axes[1, 0].set_xticklabels([f'ν={nu}' for nu in nu_values])
-    axes[1, 0].set_yticks(range(n_n))
-    axes[1, 0].set_yticklabels([f'n={n}' for n in n_values])
-    plt.colorbar(im3, ax=axes[1, 0])
+    # Plot 1: Success Rate
+    plt.figure(figsize=(8, 6))
+    im1 = plt.imshow(success_matrix, cmap='RdYlGn', aspect='auto', vmin=0, vmax=100)
+    # plt.title('Success Rate (%)')
+    plt.xticks(range(n_nu), [f'ν={nu}' for nu in nu_values])
+    plt.yticks(range(n_n), [f'n={n}' for n in n_values])
+    # plt.ylabel([f'n={n}' for n in n_values])
+    plt.colorbar(im1)
     
     # Add text annotations
     for i in range(n_n):
         for j in range(n_nu):
             if not np.isnan(success_matrix[i, j]):
-                text = axes[1, 0].text(j, i, f'{success_matrix[i, j]:.0f}%',
+                text = plt.text(j, i, f'{success_matrix[i, j]:.0f}%',
                                      ha="center", va="center", 
                                      color="black" if success_matrix[i, j] > 50 else "white",
-                                     fontsize=10)
+                                     fontsize=16)
+    plt.savefig('./fig/mixed_precision_comparison_success_rate.pdf', dpi=300, bbox_inches='tight')
     
-    # Plot 4: Maximum Error
-    im4 = axes[1, 1].imshow(max_error_matrix, cmap='Reds', aspect='auto')
-    axes[1, 1].set_title('Maximum Log-Likelihood Difference')
-    axes[1, 1].set_xticks(range(n_nu))
-    axes[1, 1].set_xticklabels([f'ν={nu}' for nu in nu_values])
-    axes[1, 1].set_yticks(range(n_n))
-    axes[1, 1].set_yticklabels([f'n={n}' for n in n_values])
-    plt.colorbar(im4, ax=axes[1, 1])
+    # Plot 2: Maximum Error (with log colorbar)
+
+    plt.figure(figsize=(8, 6))
+    # To avoid issues with log scale, set minimum positive value for log scale
+    min_nonzero = np.nanmin(max_error_matrix[max_error_matrix > 0]) if np.any(max_error_matrix > 0) else 1e-12
+    im2 = plt.imshow(max_error_matrix, cmap='Reds', aspect='auto', norm=LogNorm(vmin=min_nonzero, vmax=np.nanmax(max_error_matrix)))
+    # im2 = plt.imshow(max_error_matrix, cmap='Reds', aspect='auto')
+    # plt.title('Maximum Log-Likelihood Difference')
+    plt.xticks(range(n_nu), [f'ν={nu}' for nu in nu_values])
+    plt.yticks(range(n_n), [f'n={n}' for n in n_values])
+    # plt.ylabel([f'n={n}' for n in n_values])
+    plt.colorbar(im2)
     
     # Add text annotations
     for i in range(n_n):
         for j in range(n_nu):
             if not np.isnan(max_error_matrix[i, j]):
-                text = axes[1, 1].text(j, i, f'{max_error_matrix[i, j]:.1e}',
-                                     ha="center", va="center", color="white", fontsize=10)
+                text = plt.text(j, i, f'{max_error_matrix[i, j]:.1e}',
+                                     ha="center", va="center", color="white", fontsize=16)
     
     plt.tight_layout()
-    return fig
+    plt.savefig('./fig/mixed_precision_comparison_max_error.pdf', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    # Plot 3: Speedup Comparison
+    plt.figure(figsize=(8, 6))
+    im3 = plt.imshow(speedup_matrix, cmap='Blues', aspect='auto', vmin=np.nanmin(speedup_matrix), vmax=np.nanmax(speedup_matrix))
+    # plt.title('Mixed Precision Speedup (Double Time / Mixed Time)')
+    plt.xticks(range(n_nu), [f'ν={nu}' for nu in nu_values])
+    plt.yticks(range(n_n), [f'n={n}' for n in n_values])
+    plt.colorbar(im3)
+    
+    # Add text annotations
+    for i in range(n_n):
+        for j in range(n_nu):
+            if not np.isnan(speedup_matrix[i, j]):
+                text = plt.text(j, i, f'{speedup_matrix[i, j]:.2f}x',
+                                     ha="center", va="center", color="white", fontsize=16)
+    
+    plt.tight_layout()
+    plt.savefig('./fig/mixed_precision_speedup_comparison.pdf', dpi=300, bbox_inches='tight')
+    plt.show()
+    
 
 def create_summary_table(results: Dict[str, Any]):
     """Create a summary table of the results."""
@@ -247,31 +260,42 @@ def create_summary_table(results: Dict[str, Any]):
     for op, precision in results['mixed_precision_config'].items():
         print(f"  {op}: {precision}")
     
-    print(f"\n{'n':>4} {'ν':>4} {'Success%':>8} {'Mean LL Diff':>12} {'Max LL Diff':>12} {'Mean Rel Err':>12} {'Max Rel Err':>12}")
-    print("-" * 80)
+    print(f"\n{'n':>4} {'ν':>4} {'Success%':>8} {'Mean LL Diff':>12} {'Max LL Diff':>12} {'Mean Rel Err':>12} {'Max Rel Err':>12} {'Double Time':>12} {'Mixed Time':>12} {'Speedup':>8}")
+    print("-" * 120)
     
     for exp in experiments:
         print(f"{exp['n']:>4} {exp['nu']:>4.1f} {exp['success_rate']:>7.0f}% "
               f"{exp['mean_ll_difference']:>11.2e} {exp['max_ll_difference']:>11.2e} "
-              f"{exp['mean_relative_error']:>11.2e} {exp['max_relative_error']:>11.2e}")
+              f"{exp['mean_relative_error']:>11.2e} {exp['max_relative_error']:>11.2e} "
+              f"{exp['double_time_mean']:>11.3f}s {exp['mixed_time_mean']:>11.3f}s "
+              f"{exp['speedup_mean']:>7.2f}x")
     
     # Overall statistics
     all_mean_diffs = [exp['mean_ll_difference'] for exp in experiments if not np.isnan(exp['mean_ll_difference'])]
     all_rel_errors = [exp['mean_relative_error'] for exp in experiments if not np.isnan(exp['mean_relative_error'])]
     all_success_rates = [exp['success_rate'] for exp in experiments]
+    all_double_times = [exp['double_time_mean'] for exp in experiments if not np.isnan(exp['double_time_mean'])]
+    all_mixed_times = [exp['mixed_time_mean'] for exp in experiments if not np.isnan(exp['mixed_time_mean'])]
+    all_speedups = [exp['speedup_mean'] for exp in experiments if not np.isnan(exp['speedup_mean'])]
     
-    print("-" * 80)
+    print("-" * 120)
     print(f"Overall Statistics:")
     print(f"  Average Success Rate: {np.mean(all_success_rates):.1f}%")
     print(f"  Average Mean LL Difference: {np.mean(all_mean_diffs):.2e}")
     print(f"  Average Mean Relative Error: {np.mean(all_rel_errors):.2e}")
     print(f"  Maximum LL Difference: {np.max([exp['max_ll_difference'] for exp in experiments if not np.isnan(exp['max_ll_difference'])]):.2e}")
+    print(f"  Average Double Time: {np.mean(all_double_times):.3f}s")
+    print(f"  Average Mixed Time: {np.mean(all_mixed_times):.3f}s")
+    print(f"  Average Speedup: {np.mean(all_speedups):.2f}x")
+    print(f"  Maximum Speedup: {np.max(all_speedups):.2f}x")
 
 def main():
     """Main function to run mixed precision comparison."""
     # Experimental parameters
     n_values = [10, 20, 50, 80, 100, 200, 500, 1000]
     nu_values = [0.5, 1.5, 2.5]
+    # n_values = [10, 20]
+    # nu_values = [0.5]
     n_trials = 10
     
     # Run experiments
@@ -279,12 +303,10 @@ def main():
     
     # Create visualizations
     print("\nCreating visualizations...")
-    fig = visualize_mixed_precision_results(results)
-    plt.savefig('./fig/mixed_precision_comparison.pdf', 
-                dpi=300, bbox_inches='tight')
-    plt.show()
+    visualize_mixed_precision_results(results)
     
     # Create summary table
+    print("\nCreating summary table...")
     create_summary_table(results)
     
     return results

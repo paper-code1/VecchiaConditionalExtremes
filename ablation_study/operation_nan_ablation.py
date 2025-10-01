@@ -12,7 +12,7 @@ matplotlib.rcParams.update({'font.size': 18})
 
 from utils import MaternKernel, AblationGaussianProcess, generate_circle_points
 
-def run_ablation_experiment(n: int, nu: float, n_trials: int = 5) -> Dict[str, Any]:
+def run_ablation_experiment(n: int, nu: float, n_trials: int = 5, quality: str = 'best') -> Dict[str, Any]:
     """Run ablation study for specific n and nu values."""
     print(f"Running ablation study: n={n}, ν={nu}")
     
@@ -30,7 +30,7 @@ def run_ablation_experiment(n: int, nu: float, n_trials: int = 5) -> Dict[str, A
     # Generate spatial points and reference function
     np.random.seed(42 + n + int(nu*10))  # Reproducible
     for trial in range(n_trials):
-        _all_points, _inner_points, _outer_points = generate_circle_points(n)
+        _all_points, _inner_points, _outer_points = generate_circle_points(n, quality=quality)
     
         # Generate reference function values (always double precision)
         _y_true_all = np.random.multivariate_normal(
@@ -177,7 +177,7 @@ def main():
     print("=" * 60)
     
     # Experimental parameters (reduced for faster execution)
-    # n_values = [10, 100, 1000]  # Reduced from [10, 100, 1000]
+    n_quality = ['best', 'good', 'worst']  # best: the best approximation, good: the good approximation, worst: the worst approximation
     n_values = [10, 100, 1000]  # Reduced from [10, 100, 1000]
     nu_values = [0.5, 1.5, 2.5]  # Reduced from [0.5, 1.5, 2.5]
     n_trials = 10  # Reduced from 10
@@ -185,27 +185,28 @@ def main():
     all_results = []
     
     # Run experiments
-    total_experiments = len(n_values) * len(nu_values)
+    total_experiments = len(n_values) * len(nu_values) * len(n_quality)
     exp_count = 0
     
-    for n in n_values:
-        for nu in nu_values:
-            exp_count += 1
-            print(f"\nExperiment {exp_count}/{total_experiments}")
-            
-            try:
-                result = run_ablation_experiment(n, nu, n_trials)
-                all_results.append(result)
-            except Exception as e:
-                print(f"Error in experiment n={n}, nu={nu}: {e}")
-                continue
-    
-    # Create visualizations
-    print("\nCreating visualizations...")
-    fig = visualize_ablation_results(all_results)
-    plt.savefig('./fig/ablation_results.pdf', 
-                dpi=300, bbox_inches='tight')
-    plt.show()
+    for quality in n_quality:
+        for n in n_values:
+            for nu in nu_values:
+                exp_count += 1
+                print(f"\nExperiment {exp_count}/{total_experiments}")
+                
+                try:
+                    result = run_ablation_experiment(n, nu, n_trials, quality)
+                    all_results.append(result)
+                except Exception as e:
+                    print(f"Error in experiment n={n}, nu={nu}: {e}")
+                    continue
+        
+        # Create visualizations
+        print("\nCreating visualizations...")
+        fig = visualize_ablation_results(all_results)
+        plt.savefig(f'./fig/operation_nan_ablation_results_{quality}.pdf', 
+                    dpi=300, bbox_inches='tight')
+        plt.show()
     
     # Print detailed summary
     print("\n" + "=" * 60)
@@ -215,4 +216,4 @@ def main():
 if __name__ == "__main__":
     # Set random seed for reproducibility
     np.random.seed(42)
-    results = main()
+    main()
