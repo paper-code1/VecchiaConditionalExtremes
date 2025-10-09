@@ -211,7 +211,8 @@ def visualize_ablation_results(all_results: List[Dict[str, Any]]):
     ]
     
     # Create subplots - one for each n value
-    fig, axes = plt.subplots(1, len(n_values), figsize=(6 * len(n_values), 8))
+    # Increased figure size for better readability
+    fig, axes = plt.subplots(1, len(n_values), figsize=(12 * len(n_values), 5))
     if len(n_values) == 1:
         axes = [axes]
     
@@ -241,29 +242,35 @@ def visualize_ablation_results(all_results: List[Dict[str, Any]]):
         
         # Set labels - keep all x-labels, only show y-labels on leftmost subplot
         ax.set_xticks(range(len(ts_sep_combinations)))
-        ax.set_xticklabels([f'({ts:.1f},{sep:.1f})' for ts, sep in ts_sep_combinations], rotation=45, ha='right', fontsize=14)
+        ax.set_xticklabels([f'$a_t$={ts:.1f}\n$\\beta$={sep:.1f}' for ts, sep in ts_sep_combinations], 
+        # rotation=45, 
+        ha='center', fontsize=15)
         
         ax.set_yticks(range(len(operations)))
         if n_idx == 0:  # Only leftmost subplot gets y-labels
-            ax.set_yticklabels(operations, rotation=0)
+            ax.set_yticklabels(operations, rotation=0, fontsize=15)
         else:
             ax.set_yticklabels([])  # Empty labels for other subplots
-        ax.set_title(f'n = {n}')
+        # ax.set_title(f'n = {n}')
         
         # Add colorbar to the rightmost subplot
         if n_idx == len(n_values) - 1:
             plt.colorbar(im, ax=ax, label='Success Rate (%)')
         
-        # Add text annotations
+    
+        # Add text annotations with smaller font size
         for i in range(len(operations)):
             for j in range(len(ts_sep_combinations)):
-                text_color = "black" if success_data[i, j] > 50 else "white"
-                ax.text(j, i, f'{success_data[i, j]:.0f}%',
-                       ha="center", va="center", color=text_color, fontsize=14)
+                # text_color = "black" if success_data[i, j] > 50 else "white"
+                text_color = "black"
+                # ax.text(j, i, f'{success_data[i, j]:.0f}%',
+                #        ha="center", va="center", color=text_color, fontsize=14)
+                ax.text(j, i, f'{success_data[i, j]:.1f}',
+                       ha="center", va="center", color=text_color, fontsize=15)
     
     # plt.suptitle('Success Rate (%) by Operation, Time Scale, and Separability for Different Sample Sizes', fontsize=16)
     # Add x label for the main figure (shared for all subplots)
-    fig.supxlabel('(Time scale, Separability)', fontsize=18)
+    # fig.supxlabel('(Time scale, Separability)', fontsize=18)
     plt.tight_layout()
     return fig
 
@@ -303,12 +310,12 @@ def main(results_root: Optional[str] = None, timestamp: bool = True, load_result
 
     # Experimental parameters (reduced for faster execution)
     n_quality = ['best', 'good', 'worst']  # best: the best approximation, good: the good approximation, worst: the worst approximation['best', 'good', 'worst']
-    n_values = [10, 100, 1000]  # Reduced from [10, 100, 1000]
+    n_values = [100]  # Reduced from [10, 100, 1000]
     n_seperablity = [0.0,  0.5, 1.0] # seperablity[0.0, 0.5, 1.0]
-    n_time_scale = [0.1,  0.5, 0.8] # time scale
-    n_dim_scale = [[0.05, 0.05, 0.05, 5, 5, 5, 5, 5, 5, 5]] # dimension scale
-    n_dim_length = [10] # dimension length
-    nu_values = [3.5]  # Reduced from [0.5, 1.5, 2.5]
+    n_time_scale = [1,  5, 10] # time scale
+    n_dim_scale = [[0.23, 0.23]] # dimension scale
+    n_dim_length = [2] # dimension length
+    nu_values = [1.5]  # Reduced from [0.5, 1.5, 2.5]
     n_time_lag = [2] # time lag
     n_nu_time = [0.5] # time smoothness
     

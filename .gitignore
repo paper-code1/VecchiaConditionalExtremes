@@ -30,3 +30,6 @@ experiments/simulations/maternSimuData
 src/bv-mpi.code-workspace
 ablation_study/fig/
 simulations/fig/
+
+ablation_study_space_time/results/
+ablation_study_space_time/*.png

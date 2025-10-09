@@ -415,16 +415,17 @@ def generate_circle_points(n: int, n_points: int = 300,
     inner_points_spatial = points[inner_mask]
     outer_points_spatial = points[outer_mask]
     
-    print(f"Generated {len(points)} total points:")
-    print(f"  - Inner region: {len(inner_points_spatial)} points")
-    print(f"  - Outer region: {len(outer_points_spatial)} points")
+    # print(f"Generated {len(points)} total points:")
+    # print(f"  - Inner region: {len(inner_points_spatial)} points")
+    # print(f"  - Outer region: {len(outer_points_spatial)} points")
 
     if quality == 'good':
         # mimic the good approximation, to expand the outer nearest points
-        outer_points_spatial = outer_points_spatial * np.sqrt(n)
+        outer_points_spatial *= np.sqrt(n)
     elif quality == 'worst':
         # mimic the worst approximation, to shrink the outer nearest points, do a shift
-        outer_points_spatial = outer_points_spatial + 0.5
+        outer_points_spatial *= n
+        outer_points_spatial += 0.5
 
     # For each time tag, repeat the spatial points and append the time as the last column
     def add_time_tags(spatial_points, time_lag):
@@ -447,12 +448,21 @@ def generate_circle_points(n: int, n_points: int = 300,
     # Combine original outer_points and extra_outer_points
     outer_points = np.vstack([all_outer_points, extra_outer_points])
 
+    # # Find indices for outer points at the last time step
+    # last_time_mask = (outer_points[:, -1] == (time_lag - 1))
+    # if quality == 'good':
+    #     # mimic the good approximation, to expand the outer nearest points
+    #     outer_points[np.ix_(last_time_mask, np.arange(dim_length))] *= np.sqrt(n)
+    # elif quality == 'worst':
+    #     # mimic the worst approximation, to shrink the outer nearest points, do a shift
+    #     outer_points[np.ix_(last_time_mask, np.arange(dim_length))] += 0.5
+
     # Concatenate all points (inner first, then outer)
     points = np.concatenate([inner_points, outer_points], axis=0)
     
-    print(f"Generated {len(points)} total points:")
-    print(f"  - Inner region: {len(inner_points)} points")
-    print(f"  - Outer region: {len(outer_points)} points")
+    # print(f"Generated {len(points)} total points:")
+    # print(f"  - Inner region: {len(inner_points)} points")
+    # print(f"  - Outer region: {len(outer_points)} points")
 
     return points, inner_points, outer_points
 
@@ -499,13 +509,12 @@ def format_experiment_filename(prefix: str, params: Dict[str, Any], suffix: str 
 
 
 def prepare_results_dir(
-    experiment_name: str,
     root: Optional[PathLike] = None,
     timestamp: bool = True,
     subdirs: Optional[List[str]] = None,
 ) -> Dict[str, Path]:
     root_path = Path(root).expanduser() if root is not None else DEFAULT_RESULTS_ROOT
-    experiment_root = root_path / experiment_name
+    experiment_root = root_path
 
     run_dir = experiment_root
     if timestamp:

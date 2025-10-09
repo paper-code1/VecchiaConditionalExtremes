@@ -5,6 +5,7 @@ import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import time
+import json
 from typing import Tuple, Dict, Any, List, Optional
 import warnings
 from pathlib import Path
@@ -285,6 +286,15 @@ def create_ranking_comparison_plot(all_results: List[Dict[str, Any]]):
                 'result': result
             }
             param_combinations.append(combo)
+        else:
+            combo = {
+                'n': result['n'],
+                'nu': result['nu'],
+                'separability': result.get('seperablity', 0.0),
+                'time_scale': result.get('time_scale', 1.0),
+                'result': 9999.
+            }
+            param_combinations.append(combo)
     
     # Sort by n, then separability, then time_scale
     param_combinations.sort(key=lambda x: (x['n'], x['separability'], x['time_scale']))
@@ -363,72 +373,20 @@ def create_ranking_comparison_plot(all_results: List[Dict[str, Any]]):
     return fig
 
 
-def visualize_existing_results(results_dir: str, quality: str = 'best'):
-    """
-    Load existing results from a directory and create all visualizations.
-    
-    Args:
-        results_dir: Path to the directory containing saved results
-        quality: Quality level to filter results ('best', 'good', 'worst')
-    """
-    print(f"Loading results from: {results_dir}")
-    
-    # Load all results
-    all_results = load_all_experiment_results(results_dir)
-    
-    if not all_results:
-        print("No results found in the specified directory.")
-        return
-    
-    # Filter by quality if specified
-    quality_results = [res for res in all_results if res.get('quality') == quality]
-    
-    if not quality_results:
-        print(f"No results found for quality level: {quality}")
-        return
-    
-    print(f"Found {len(quality_results)} results for quality level: {quality}")
-    
-    # Create output directory for new visualizations
-    results_path = Path(results_dir)
-    output_dir = results_path / "rerun_figures"
-    output_dir.mkdir(exist_ok=True)
-    
-    # Create visualizations
-    print("Creating visualizations...")
-    
-    # Main ranking plot
-    fig1 = create_main_operation_ranking_plot(quality_results)
-    filename1 = output_dir / f'operation_main_ranking_{quality}.pdf'
-    plt.figure(fig1.number)
-    plt.savefig(filename1, dpi=300, bbox_inches='tight')
-    plt.close(fig1)
-    print(f"Saved main ranking plot to: {filename1}")
-    
-    # # Parameter subfigures
-    # fig2 = create_parameter_subfigures(quality_results)
-    # filename2 = output_dir / f'operation_parameter_subfigures_{quality}.pdf'
-    # plt.figure(fig2.number)
-    # plt.savefig(filename2, dpi=300, bbox_inches='tight')
-    # plt.close(fig2)
-    # print(f"Saved parameter subfigures to: {filename2}")
-    
-    # Ranking comparison (if multiple parameter combinations)
-    if len(quality_results) >= 2:
-        fig3 = create_ranking_comparison_plot(quality_results)
-        filename3 = output_dir / f'operation_ranking_comparison_{quality}.pdf'
-        plt.figure(fig3.number)
-        plt.savefig(filename3, dpi=300, bbox_inches='tight')
-        plt.close(fig3)
-        print(f"Saved ranking comparison to: {filename3}")
-    
-    print(f"\nAll visualizations saved to: {output_dir}")
+def load_results_from_json(results_file: str) -> List[Dict[str, Any]]:
+    """Load results from a JSON file."""
+    print(f"Loading results from: {results_file}")
+    with open(results_file, 'r') as f:
+        results = load_json(results_file)
+    print(f"Loaded {len(results)} experiment results")
+    return results
 
 
 def main(
     results_root: Optional[str] = None,
     timestamp: bool = True,
     n_trials_override: Optional[int] = None,
+    load_results: Optional[str] = None,
 ) -> None:
     """Main function to run the error impact analysis."""
     print("Operation Error Impact Analysis for Mixed Precision Gaussian Processes")
@@ -441,16 +399,48 @@ def main(
         subdirs=["figures", "data", "logs"],
     )
 
+    # If loading existing results, skip experiments and go straight to visualization
+    if load_results:
+        print(f"Loading existing results from: {load_results}")
+        all_results = load_results_from_json(load_results)
+        
+        # Create visualizations for each quality type
+        quality_types = sorted(set(r.get('quality', 'unknown') for r in all_results))
+        for quality in quality_types:
+            print(f"\nCreating visualizations for quality: {quality}...")
+            quality_results = [res for res in all_results if res.get('quality') == quality]
+            if quality_results:
+                # Main ranking plot
+                fig1 = create_main_operation_ranking_plot(quality_results)
+                filename1 = results_paths['figures'] / f'operation_main_ranking_{quality}.pdf'
+                plt.savefig(filename1, dpi=300, bbox_inches='tight')
+                plt.close(fig1)
+                print(f"Saved main ranking plot to: {filename1}")
+                
+                # Ranking comparison plot (if multiple parameter combinations)
+                if len(quality_results) >= 2:
+                    fig3 = create_ranking_comparison_plot(quality_results)
+                    filename3 = results_paths['figures'] / f'operation_ranking_comparison_{quality}.pdf'
+                    plt.savefig(filename3, dpi=300, bbox_inches='tight')
+                    plt.close(fig3)
+                    print(f"Saved ranking comparison to: {filename3}")
+        
+        print(f"\nVisualization complete! Check: {results_paths['figures']}")
+        return
+
+    # Original experiment code continues here...
+
     # Experimental parameters
     n_quality = ['best', 'good', 'worst'] # , 'good', 'worst'
-    n_values = [10, 100, 1000]
-    nu_values = [3.5]
-    n_seperablity = [0.0, 0.5, 1.0]
-    n_time_scale = [0.1, 0.5, 0.8]
-    n_dim_scale = [[0.05, 0.05, 0.05, 5, 5, 5, 5, 5, 5, 5]]
-    n_dim_length = [10]
-    n_time_lag = [2]
-    n_nu_time = [0.5]
+    n_values = [100]  # Reduced from [10, 100, 1000]
+    n_seperablity = [0.0,  0.5, 1.0] # seperablity[0.0, 0.5, 1.0]
+    n_time_scale = [1,  5, 10] # time scale
+    n_dim_scale = [[0.23, 0.23]] # dimension scale
+    n_dim_length = [2] # dimension length
+    nu_values = [1.5]  # Reduced from [0.5, 1.5, 2.5]
+    n_time_lag = [2] # time lag
+    n_nu_time = [0.5] # time smoothness
+    
     n_trials_default = 10
     n_trials = n_trials_override or n_trials_default
 
@@ -646,17 +636,10 @@ def parse_args() -> argparse.Namespace:
         help="Override the number of trials per experiment configuration.",
     )
     parser.add_argument(
-        "--visualize-only",
+        "--load-results",
         type=str,
         default=None,
-        help="Only create visualizations from existing results in the specified directory.",
-    )
-    parser.add_argument(
-        "--quality",
-        type=str,
-        default="best",
-        choices=["best", "good", "worst"],
-        help="Quality level for visualization filtering (default: best).",
+        help="Path to existing results JSON file to load for visualization only. Skips running experiments.",
     )
     return parser.parse_args()
     
@@ -666,13 +649,10 @@ if __name__ == "__main__":
     np.random.seed(42)
     args = parse_args()
     
-    if args.visualize_only:
-        # Only create visualizations from existing results
-        visualize_existing_results(args.visualize_only, quality=args.quality)
-    else:
-        # Run full analysis
-        main(
-            results_root=args.results_root,
-            timestamp=not args.no_timestamp,
-            n_trials_override=args.n_trials,
-        )
+    # Run main function with load_results option
+    main(
+        results_root=args.results_root,
+        timestamp=not args.no_timestamp,
+        n_trials_override=args.n_trials,
+        load_results=args.load_results,
+    )
