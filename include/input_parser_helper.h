@@ -88,10 +88,24 @@ struct Opts
     bool mp_core_ops_double;       // preset: enable covgen, trsm, gemm, potrf_final, batched_add
 
     // timing
-    float time_covgen;
-    float time_cholesky_trsm_gemm;
-    float time_cholesky_trsm;
+    float time_covgen; // legacy aggregate
+    float time_cholesky_trsm_gemm; // legacy aggregate
+    float time_cholesky_trsm; // legacy aggregate
     float time_gpu_total;
+    // fine-grained stage timings (ms)
+    float t_cov_self;     // cov(X,X)
+    float t_cov_cross;    // cov(NN,X)
+    float t_cov_cond;     // cov(NN,NN)
+    float t_potrf_neighbors;
+    float t_trsm_cross;
+    float t_trsm_obs;
+    float t_gemm_covcorr;
+    float t_gemm_mucorr;
+    float t_batched_matadd;
+    float t_batched_vecadd;
+    float t_potrf_final;
+    float t_trsm_final;
+    float t_norm_det;
 
     // paths
     std::string train_metadata_path;

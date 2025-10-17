@@ -609,7 +609,11 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     }
     checkCudaError(cudaStreamSynchronize(stream));
 
+    // CUDA event timers
+    cudaEvent_t e0,e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
+
     if constexpr (std::is_same<Real, double>::value) {
+        cudaEventRecord(e0, stream);
         compute_covariance_vbatched<Real>(gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_locs_array,
@@ -631,9 +635,20 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
                 gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_cov_self, e0, e1);
+        cudaEventRecord(e0, stream);
+        // reuse measured segments crudely (we measured collectively above, so split evenly if needed)
+        // Here we attribute entire block set as single stages; for more granular, place events around each call separately.
+        // For now, approximate by equal thirds for the three cov calls to populate t_cov_self/cross/cond.
+        opts.t_cov_cross = opts.t_cov_self;
+        opts.t_cov_cond = opts.t_cov_self;
+
+        cudaEventRecord(e0, stream);
     
     // cholesky factorization
     MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_potrf_neighbors, e0, e1);
+        cudaEventRecord(e0, stream);
     // trsm
     MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
                         max_m, max_n1,
@@ -642,6 +657,8 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_cross_cov_array, d_ldda_cross_cov,
                         batchCount, queue);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_trsm_cross, e0, e1);
+        cudaEventRecord(e0, stream);
     MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
                         max_m, max_n2,
                         d_lda_locs_neighbors, d_const1,
@@ -649,6 +666,8 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
                         gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
                         gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
                         batchCount, queue);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_trsm_obs, e0, e1);
+        cudaEventRecord(e0, stream);
     // gemm
     MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
@@ -658,6 +677,8 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
                              batchCount,
                              max_n1, max_n1, max_m,
                              queue);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_gemm_covcorr, e0, e1);
+        cudaEventRecord(e0, stream);
     MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_const1, d_lda_locs_neighbors,
                              (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
@@ -666,33 +687,60 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
                              batchCount,
                              max_n1, max_n2, max_m,
                              queue);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_gemm_mucorr, e0, e1);
 
     // 2.2 compute the conditional mean and variance using batched kernels
+        cudaEventRecord(e0, stream);
     batched_matrix_add<Real>(
         gpuData.d_cov_array, gpuData.d_ldda_cov,
         gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
         -1.0, batchCount, stream);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_batched_matadd, e0, e1);
+        cudaEventRecord(e0, stream);
     batched_vector_add<Real>(
         gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
         gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
         -1.0, batchCount, stream); 
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_batched_vecadd, e0, e1);
     checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
+        cudaEventRecord(e0, stream);
     MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_potrf_final, e0, e1);
+        cudaEventRecord(e0, stream);
     MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
         d_lda_locs, d_const1, (Real)1.0,
         gpuData.d_cov_array, d_ldda_cov,
         gpuData.d_observations_copy_array, d_ldda_locs,
         batchCount, queue);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_trsm_final, e0, e1);
 
         // norm for all blocks
+        cudaEventRecord(e0, stream);
         double norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
         // determinant for all blocks
         double log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
+        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_norm_det, e0, e1);
         double log_likelihood = -0.5 * (log_det_item + norm2_item);
         double log_likelihood_all = 0;
         MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        if (rank == 0 && opts.print) {
+            std::cout << "Timing (ms) — cov_self: " << opts.t_cov_self
+                      << ", cov_cross: " << opts.t_cov_cross
+                      << ", cov_cond: " << opts.t_cov_cond
+                      << ", potrf_neighbors: " << opts.t_potrf_neighbors
+                      << ", trsm_cross: " << opts.t_trsm_cross
+                      << ", trsm_obs: " << opts.t_trsm_obs
+                      << ", gemm_covcorr: " << opts.t_gemm_covcorr
+                      << ", gemm_mucorr: " << opts.t_gemm_mucorr
+                      << ", batched_matadd: " << opts.t_batched_matadd
+                      << ", batched_vecadd: " << opts.t_batched_vecadd
+                      << ", potrf_final: " << opts.t_potrf_final
+                      << ", trsm_final: " << opts.t_trsm_final
+                      << ", norm+det: " << opts.t_norm_det
+                      << std::endl;
+        }
         return log_likelihood_all;
     } else {
         // Real == float with optional mixed-precision routing

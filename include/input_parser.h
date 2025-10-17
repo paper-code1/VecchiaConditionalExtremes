@@ -251,6 +251,18 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.time_cholesky_trsm = 0;
     opts.time_covgen = 0;
     opts.time_gpu_total = 0;
+    // fine-grained
+    opts.t_cov_self = opts.t_cov_cross = opts.t_cov_cond = 0;
+    opts.t_potrf_neighbors = 0;
+    opts.t_trsm_cross = 0;
+    opts.t_trsm_obs = 0;
+    opts.t_gemm_covcorr = 0;
+    opts.t_gemm_mucorr = 0;
+    opts.t_batched_matadd = 0;
+    opts.t_batched_vecadd = 0;
+    opts.t_potrf_final = 0;
+    opts.t_trsm_final = 0;
+    opts.t_norm_det = 0;
     opts.perf = result["perf"].as<int>();
     return true;
 }
