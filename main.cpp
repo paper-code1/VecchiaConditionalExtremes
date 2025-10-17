@@ -444,31 +444,31 @@ int main(int argc, char **argv)
                     opts.upper_bounds[0] = 3.0;
                     opts.lower_bounds[1] = 0.01; // smoothness
                     opts.upper_bounds[1] = 2.0;
-                    opts.lower_bounds[2] = 0.0; // nugget
+                    opts.lower_bounds[2] = 0.00001; // nugget
                     opts.upper_bounds[2] = 0.1;
                     break;
                 case KernelType::Matern72:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 2.0;
-                    opts.lower_bounds[1] = 0.0; // nugget
+                    opts.lower_bounds[1] = 0.00001; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 case KernelType::Matern12:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 3.0;
-                    opts.lower_bounds[1] = 0.0; // nugget
+                    opts.lower_bounds[1] = 0.00001; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 case KernelType::Matern32:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 3.0;
-                    opts.lower_bounds[1] = 0.0; // nugget
+                    opts.lower_bounds[1] = 0.00001; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 case KernelType::Matern52:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 3.0;
-                    opts.lower_bounds[1] = 0.0; // nugget
+                    opts.lower_bounds[1] = 0.00001; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 default:

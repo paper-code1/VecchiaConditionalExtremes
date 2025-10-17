@@ -79,6 +79,46 @@ struct GpuDataT
     Real **d_observations_copy_array; 
     Real **d_mu_correction_array;
     Real **d_cov_correction_array;
+
+    // total sizes in bytes for contiguous buffers (for conversions)
+    size_t total_cov_size_bytes = 0;
+    size_t total_cross_cov_size_bytes = 0;
+    size_t total_conditioning_cov_size_bytes = 0;
+
+    // Optional double-precision mirrors for mixed-precision execution (used when base Real=float)
+    // Device contiguous buffers (allocated only if requested via opts)
+    double *d_locs_device_f64 = nullptr;
+    double *d_locs_neighbors_device_f64 = nullptr;
+    double *d_cov_device_f64 = nullptr;
+    double *d_cross_cov_device_f64 = nullptr;
+    double *d_conditioning_cov_device_f64 = nullptr;
+    double *d_observations_neighbors_copy_device_f64 = nullptr;
+    double *d_observations_copy_device_f64 = nullptr;
+    double *d_mu_correction_device_f64 = nullptr;
+    double *d_cov_correction_device_f64 = nullptr;
+    double *d_range_device_f64 = nullptr;
+
+    // Host arrays of pointers for double-precision matrices/vectors
+    double **h_locs_array_f64 = nullptr;
+    double **h_locs_neighbors_array_f64 = nullptr;
+    double **h_cov_array_f64 = nullptr;
+    double **h_cross_cov_array_f64 = nullptr;
+    double **h_conditioning_cov_array_f64 = nullptr;
+    double **h_observations_neighbors_copy_array_f64 = nullptr;
+    double **h_observations_copy_array_f64 = nullptr;
+    double **h_mu_correction_array_f64 = nullptr;
+    double **h_cov_correction_array_f64 = nullptr;
+
+    // Device arrays of pointers for double-precision
+    double **d_locs_array_f64 = nullptr;
+    double **d_locs_neighbors_array_f64 = nullptr;
+    double **d_cov_array_f64 = nullptr;
+    double **d_cross_cov_array_f64 = nullptr;
+    double **d_conditioning_cov_array_f64 = nullptr;
+    double **d_observations_neighbors_copy_array_f64 = nullptr;
+    double **d_observations_copy_array_f64 = nullptr;
+    double **d_mu_correction_array_f64 = nullptr;
+    double **d_cov_correction_array_f64 = nullptr;
 };
 
 using GpuData = GpuDataT<double>;

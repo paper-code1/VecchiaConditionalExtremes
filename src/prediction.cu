@@ -22,6 +22,7 @@
 #include "prediction.h"
 #include "error_checking.h"
 #include "magma_dispatch.h"
+#include <type_traits>
 
 // Templated function to perform prediction on the GPU
 template <typename Real>
@@ -68,70 +69,102 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuDataT<Real> &
                                    opts.dim * sizeof(Real), 
                                    cudaMemcpyHostToDevice));
     }
+    if constexpr (std::is_same<Real,float>::value) {
+        bool cov64_local = (opts.precision == PrecisionType::Float) && (opts.mp_cov_double || opts.mp_all_double_ops);
+        if (cov64_local) {
+            std::vector<double> range_host_d(opts.dim);
+            for (int i=0;i<opts.dim;++i) range_host_d[i] = theta[range_offset + i];
+            checkCudaError(cudaMemcpy(gpuData.d_range_device_f64, range_host_d.data(), opts.dim * sizeof(double), cudaMemcpyHostToDevice));
+        }
+    }
 
     // Use the data on the GPU for computation
     // 1. generate the covariance matrix, cross covariance matrix, conditioning covariance matrix
-    compute_covariance_vbatched<Real>(gpuData.d_locs_array,
+    bool cov64 = (opts.precision == PrecisionType::Float) && (opts.mp_cov_double || opts.mp_all_double_ops);
+    bool schur64 = (opts.precision == PrecisionType::Float) && (opts.mp_schur_double || opts.mp_all_double_ops);
+
+    if constexpr (std::is_same<Real,double>::value) {
+        compute_covariance_vbatched<Real>(gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
+        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    } else {
+        if (cov64) {
+            compute_covariance_vbatched<double>(gpuData.d_locs_array_f64, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_locs_array_f64, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cov_array_f64, gpuData.d_ldda_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device_f64, true, stream, opts);
+            compute_covariance_vbatched<double>(gpuData.d_locs_neighbors_array_f64, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_array_f64, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cross_cov_array_f64, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device_f64, false, stream, opts);
+            compute_covariance_vbatched<double>(gpuData.d_locs_neighbors_array_f64, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_neighbors_array_f64, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_conditioning_cov_array_f64, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors, batchCount, opts.dim, theta, gpuData.d_range_device_f64, true, stream, opts);
+        } else {
+            compute_covariance_vbatched<float>(gpuData.d_locs_array, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_locs_array, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+            compute_covariance_vbatched<float>(gpuData.d_locs_neighbors_array, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_array, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+            compute_covariance_vbatched<float>(gpuData.d_locs_neighbors_array, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_neighbors_array, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors, batchCount, opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+        }
+    }
     // Synchronize to make sure the kernel has finished
     checkCudaError(cudaStreamSynchronize(stream));
     
     // 2. perform the computation
     // 2.1 compute the correction term for mean and variance (i.e., Schur complement)
-    MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        dinfo_magma, batchCount, max_m, queue);
-    // trsm
-    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
-                        max_m, max_n1, 
-                        d_lda_locs_neighbors, d_lda_locs,
-                        (Real)1.0,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                        batchCount, queue);
-    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, 
-                        max_m, max_n2, 
-                        d_lda_locs_neighbors, d_const1,
-                        (Real)1.0,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                        batchCount, queue);
-    // gemm
-    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                             d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
-                             (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             (Real)0, gpuData.d_cov_correction_array, d_ldda_cov,
-                             batchCount, 
-                             max_n1, max_n1, max_m, 
-                             queue);
-    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                             d_lda_locs, d_const1, d_lda_locs_neighbors,
-                             (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                             (Real)0, gpuData.d_mu_correction_array, d_ldda_locs,
-                             batchCount, 
-                             max_n1, max_n2, max_m,
-                             queue);
+    if constexpr (std::is_same<Real,double>::value) {
+        MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
+        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n1, d_lda_locs_neighbors, d_lda_locs, (Real)1.0, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, gpuData.d_cross_cov_array, d_ldda_cross_cov, batchCount, queue);
+        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n2, d_lda_locs_neighbors, d_const1, (Real)1.0, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors, batchCount, queue);
+        MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_lda_locs, d_lda_locs_neighbors, (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov, gpuData.d_cross_cov_array, d_ldda_cross_cov, (Real)0, gpuData.d_cov_correction_array, d_ldda_cov, batchCount, max_n1, max_n1, max_m, queue);
+        MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_const1, d_lda_locs_neighbors, (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov, gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors, (Real)0, gpuData.d_mu_correction_array, d_ldda_locs, batchCount, max_n1, max_n2, max_m, queue);
+    } else if (schur64) {
+        // prepare double copies for RHS if needed
+        convert_array<double, float>(gpuData.d_observations_neighbors_device, gpuData.d_observations_neighbors_copy_device_f64, (size_t)(gpuData.total_observations_neighbors_size/sizeof(float)), stream);
+        if (!cov64) {
+            convert_array<double, float>(gpuData.d_conditioning_cov_device, gpuData.d_conditioning_cov_device_f64, (size_t)(gpuData.total_conditioning_cov_size_bytes/sizeof(float)), stream);
+            convert_array<double, float>(gpuData.d_cross_cov_device, gpuData.d_cross_cov_device_f64, (size_t)(gpuData.total_cross_cov_size_bytes/sizeof(float)), stream);
+        }
+        MagmaOps<double>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array_f64, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
+        MagmaOps<double>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n1, d_lda_locs_neighbors, d_lda_locs, 1.0, gpuData.d_conditioning_cov_array_f64, d_ldda_conditioning_cov, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, batchCount, queue);
+        MagmaOps<double>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n2, d_lda_locs_neighbors, d_const1, 1.0, gpuData.d_conditioning_cov_array_f64, d_ldda_conditioning_cov, gpuData.d_observations_neighbors_copy_array_f64, d_ldda_neighbors, batchCount, queue);
+        MagmaOps<double>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_lda_locs, d_lda_locs_neighbors, 1.0, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, 0.0, gpuData.d_cov_correction_array_f64, d_ldda_cov, batchCount, max_n1, max_n1, max_m, queue);
+        MagmaOps<double>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_const1, d_lda_locs_neighbors, 1.0, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, gpuData.d_observations_neighbors_copy_array_f64, d_ldda_neighbors, 0.0, gpuData.d_mu_correction_array_f64, d_ldda_locs, batchCount, max_n1, max_n2, max_m, queue);
+        // convert results back to float for downstream operations
+        convert_array<float, double>(gpuData.d_cov_correction_device_f64, gpuData.d_cov_correction_device, (size_t)(gpuData.total_cov_size_bytes/sizeof(float)), stream);
+        convert_array<float, double>(gpuData.d_mu_correction_device_f64, gpuData.d_mu_correction_device, (size_t)(gpuData.total_observations_points_size/sizeof(float)), stream);
+        if (cov64) {
+            convert_array<float, double>(gpuData.d_cov_device_f64, gpuData.d_cov_device, (size_t)(gpuData.total_cov_size_bytes/sizeof(float)), stream);
+        }
+    } else {
+        // pure float
+        MagmaOps<float>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
+        MagmaOps<float>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n1, d_lda_locs_neighbors, d_lda_locs, 1.0f, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, gpuData.d_cross_cov_array, d_ldda_cross_cov, batchCount, queue);
+        MagmaOps<float>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n2, d_lda_locs_neighbors, d_const1, 1.0f, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors, batchCount, queue);
+        MagmaOps<float>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_lda_locs, d_lda_locs_neighbors, 1.0f, gpuData.d_cross_cov_array, d_ldda_cross_cov, gpuData.d_cross_cov_array, d_ldda_cross_cov, 0.0f, gpuData.d_cov_correction_array, d_ldda_cov, batchCount, max_n1, max_n1, max_m, queue);
+        MagmaOps<float>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_const1, d_lda_locs_neighbors, 1.0f, gpuData.d_cross_cov_array, d_ldda_cross_cov, gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors, 0.0f, gpuData.d_mu_correction_array, d_ldda_locs, batchCount, max_n1, max_n2, max_m, queue);
+    }
     checkCudaError(cudaStreamSynchronize(stream));
     // 2.2 compute the conditional mean and variance
     for (size_t i = 0; i < batchCount; ++i){

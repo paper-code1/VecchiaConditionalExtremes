@@ -1005,3 +1005,23 @@ template void batched_matrix_add<float>(float**, const int*, float**, const int*
 template void batched_matrix_add<double>(double**, const int*, double**, const int*, const int*, double, int, cudaStream_t);
 template void batched_vector_add<float>(float**, const int*, float**, const int*, const int*, float, int, cudaStream_t);
 template void batched_vector_add<double>(double**, const int*, double**, const int*, const int*, double, int, cudaStream_t);
+
+// ---------------- Type conversion utilities -----------------
+template <typename Tout, typename Tin>
+__global__ void convert_array_kernel(const Tin* in, Tout* out, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        out[idx] = static_cast<Tout>(in[idx]);
+    }
+}
+
+template <typename Tout, typename Tin>
+void convert_array(const Tin* d_in, Tout* d_out, size_t num_elements, cudaStream_t stream) {
+    if (num_elements == 0 || d_in == nullptr || d_out == nullptr) return;
+    const int threads = 256;
+    const int blocks = (int)((num_elements + threads - 1) / threads);
+    convert_array_kernel<Tout, Tin><<<blocks, threads, 0, stream>>>(d_in, d_out, num_elements);
+}
+
+template void convert_array<double, float>(const float*, double*, size_t, cudaStream_t);
+template void convert_array<float, double>(const double*, float*, size_t, cudaStream_t);

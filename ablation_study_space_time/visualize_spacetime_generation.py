@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # Visualize all three quality settings
     for quality in ['best', 'good', 'worst']:
         fig = visualize_spacetime_2d(n=15, n_points=300, time_lag=2, quality=quality, seed=42)
-        plt.savefig(f'/home/panq/Documents/MixedPrecisionSBV/ablation_study_space_time/spacetime_visualization_{quality}.png', 
+        plt.savefig(f'/home/panq/Documents/MixedPrecisionSBV/ablation_study_space_time/spacetime_visualization_{quality}.pdf', 
                     dpi=150, bbox_inches='tight')
         print(f"Saved visualization for quality='{quality}'")
     

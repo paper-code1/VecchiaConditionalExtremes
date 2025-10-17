@@ -110,6 +110,26 @@ SBV-GP provides many configuration options:
 - `--kmeans_max_iter <N>`: Maximum iterations for k-means++ (default: 10)
 - `--num_simulations <N>`: Number of simulations for evaluation (default: 1000)
 
+#### Precision and Mixed Precision
+- `--precision <double|float>`: Baseline arithmetic precision (default: double)
+- Mixed-precision toggles (effective when `--precision float`):
+  - `--mp_cov_double`: compute covariance generation in double
+  - `--mp_schur_double`: compute conditioning (Cholesky/TRSM/GEMM) in double
+  - `--mp_final_double`: compute final factorization/solve and likelihood in double
+  - `--mp_all_double_ops`: enable all the above for an "all-double-ops in float framework" mode
+
+Examples:
+```bash
+# All double (baseline)
+./bin/dbv --precision double ...
+
+# Baseline float with selected double ops
+./bin/dbv --precision float --mp_cov_double --mp_schur_double ...
+
+# Baseline float but run major LA ops in double (easy comparison)
+./bin/dbv --precision float --mp_all_double_ops ...
+```
+
 Run `./bin/dbv --help` to see all available options.
 
 ### Example Workflows

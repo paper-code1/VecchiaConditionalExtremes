@@ -33,6 +33,18 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("distance_scale_init", "Initial distance scale for blocks, used for optimization", cxxopts::value<std::vector<double>>())
     ("kernel_type", "Kernel type", cxxopts::value<std::string>()->default_value("Matern72"))
     ("precision", "Floating point precision (double|float)", cxxopts::value<std::string>()->default_value("double"))
+    ("mp_cov_double", "Use double precision for covariance generation (only if precision=float)", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_schur_double", "Use double precision for conditioning (potrf/trsm/gemm) (only if precision=float)", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_final_double", "Use double precision for final potrf/trsm/log-likelihood (only if precision=float)", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_all_double_ops", "Shortcut to enable all above mixed-precision double ops", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    // fine-grained
+    ("mp_covgen_double", "Double for covariance generation", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_trsm_double", "Double for TRSM ops", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_gemm_double", "Double for GEMM ops", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_potrf_neighbors_double", "Double for conditioning CHOL", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_potrf_final_double", "Double for final CHOL on corrected covariance", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_batched_add_double", "Double for batched_matrix_add and batched_vector_add", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+    ("mp_core_ops_double", "Preset: enable covgen, TRSM, GEMM, final CHOL, batched add in double", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
     ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>())
     ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>())
     ("upper_bounds", "Upper bounds for optimization", cxxopts::value<std::vector<double>>())
@@ -85,6 +97,39 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
                 std::cerr << "Invalid precision: " << prec << ". Use 'double' or 'float'." << std::endl;
             }
             return false;
+        }
+        // Mixed-precision flags
+        opts.mp_cov_double = result["mp_cov_double"].as<bool>();
+        opts.mp_schur_double = result["mp_schur_double"].as<bool>();
+        opts.mp_final_double = result["mp_final_double"].as<bool>();
+        opts.mp_all_double_ops = result["mp_all_double_ops"].as<bool>();
+        // fine-grained
+        opts.mp_covgen_double = result["mp_covgen_double"].as<bool>();
+        opts.mp_trsm_double = result["mp_trsm_double"].as<bool>();
+        opts.mp_gemm_double = result["mp_gemm_double"].as<bool>();
+        opts.mp_potrf_neighbors_double = result["mp_potrf_neighbors_double"].as<bool>();
+        opts.mp_potrf_final_double = result["mp_potrf_final_double"].as<bool>();
+        opts.mp_batched_add_double = result["mp_batched_add_double"].as<bool>();
+        opts.mp_core_ops_double = result["mp_core_ops_double"].as<bool>();
+        if (opts.mp_core_ops_double) {
+            opts.mp_covgen_double = true;
+            opts.mp_trsm_double = true;
+            opts.mp_gemm_double = true;
+            opts.mp_potrf_final_double = true;
+            opts.mp_batched_add_double = true;
+        }
+        if (opts.mp_all_double_ops) {
+            // enable everything
+            opts.mp_cov_double = true;
+            opts.mp_schur_double = true;
+            opts.mp_final_double = true;
+            opts.mp_covgen_double = true;
+            opts.mp_trsm_double = true;
+            opts.mp_gemm_double = true;
+            opts.mp_potrf_neighbors_double = true;
+            opts.mp_potrf_final_double = true;
+            opts.mp_batched_add_double = true;
+            opts.mp_core_ops_double = true;
         }
     }
     opts.numPointsTotal = result["num_total_points"].as<long long>();
@@ -156,23 +201,23 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
         switch (opts.kernel_type)
         {
         case KernelType::PowerExponential:
-            opts.theta_init = {1.0, 0.5, 0.00}; // variance, smoothness, nugget;
+            opts.theta_init = {1.0, 0.5, 0.00001}; // variance, smoothness, nugget;
             opts.range_offset = 3;
             break;
         case KernelType::Matern12:
-            opts.theta_init = {1.0, 0.00}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00001}; // variance, nugget;
             opts.range_offset = 2;
             break;
         case KernelType::Matern32:
-            opts.theta_init = {1.0, 0.00}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00001}; // variance, nugget;
             opts.range_offset = 2;
             break;
         case KernelType::Matern52:
-            opts.theta_init = {1.0, 0.00}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00001}; // variance, nugget;
             opts.range_offset = 2;
             break;
         case KernelType::Matern72:
-            opts.theta_init = {1.0, 0.00}; // variance, nugget;
+            opts.theta_init = {1.0, 0.00001}; // variance, nugget;
             opts.range_offset = 2;
             break;
         default:
