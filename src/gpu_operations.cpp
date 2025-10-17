@@ -214,6 +214,9 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     // Prepare to store blocks data for coalesced memory access
     Real *locs_blocks_data = new Real[total_locs_size_host/sizeof(Real)];
     Real *locs_nearestNeighbors_data = new Real[total_locs_nearestNeighbors_size_host/sizeof(Real)];
+    // Optional host-side double copies to avoid precision loss when feeding double kernels
+    std::vector<double> locs_blocks_data64;
+    std::vector<double> locs_nearestNeighbors_data64;
 
     size_t locs_index = 0;
     size_t locs_nearestNeighbors_index = 0;
@@ -231,6 +234,12 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             for (int d = 0; d < opts.dim; ++d)
             {
                 locs_blocks_data[locs_index + d * _total_locs_num_host] = static_cast<Real>(blockInfos[i].blocks[j][d]);
+                if constexpr (std::is_same<Real, float>::value) {
+                    if (locs_blocks_data64.empty()) {
+                        locs_blocks_data64.resize((size_t)_total_locs_num_host * opts.dim);
+                    }
+                    locs_blocks_data64[(size_t)locs_index + (size_t)d * _total_locs_num_host] = blockInfos[i].blocks[j][d];
+                }
             }
             locs_index++;
         }
@@ -239,6 +248,12 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             for (int d = 0; d < opts.dim; ++d)
             {
                 locs_nearestNeighbors_data[locs_nearestNeighbors_index + d * _total_locs_nearestNeighbors_num_host] = static_cast<Real>(blockInfos[i].nearestNeighbors[j][d]);
+                if constexpr (std::is_same<Real, float>::value) {
+                    if (locs_nearestNeighbors_data64.empty()) {
+                        locs_nearestNeighbors_data64.resize((size_t)_total_locs_nearestNeighbors_num_host * opts.dim);
+                    }
+                    locs_nearestNeighbors_data64[(size_t)locs_nearestNeighbors_index + (size_t)d * _total_locs_nearestNeighbors_num_host] = blockInfos[i].nearestNeighbors[j][d];
+                }
             }
             locs_nearestNeighbors_index++;
         }
@@ -419,6 +434,9 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             checkCudaError(cudaMalloc(&gpuData.d_conditioning_cov_device_f64, (size_t)((total_conditioning_cov_size/sizeof(float))*sizeof(double))));
             checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_device_f64, (size_t)((total_observations_nearestNeighbors_size/sizeof(float))*sizeof(double))));
             checkCudaError(cudaMalloc(&gpuData.d_observations_copy_device_f64, (size_t)((total_observations_points_size/sizeof(float))*sizeof(double))));
+            // persistent double observations (optional, for precision)
+            checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_device_f64, (size_t)((total_observations_nearestNeighbors_size/sizeof(float))*sizeof(double))));
+            checkCudaError(cudaMalloc(&gpuData.d_observations_device_f64, (size_t)((total_observations_points_size/sizeof(float))*sizeof(double))));
             checkCudaError(cudaMalloc(&gpuData.d_mu_correction_device_f64, (size_t)((total_observations_points_size/sizeof(float))*sizeof(double))));
             checkCudaError(cudaMalloc(&gpuData.d_cov_correction_device_f64, (size_t)((total_cov_size/sizeof(float))*sizeof(double))));
             checkCudaError(cudaMalloc(&gpuData.d_range_device_f64, opts.dim * sizeof(double)));
@@ -431,6 +449,8 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             gpuData.h_conditioning_cov_array_f64 = new double*[blocks];
             gpuData.h_observations_neighbors_copy_array_f64 = new double*[blocks];
             gpuData.h_observations_copy_array_f64 = new double*[blocks];
+            gpuData.h_observations_array_f64 = new double*[blocks];
+            gpuData.h_observations_neighbors_array_f64 = new double*[blocks];
             gpuData.h_mu_correction_array_f64 = new double*[blocks];
             gpuData.h_cov_correction_array_f64 = new double*[blocks];
 
@@ -442,6 +462,8 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             double *cross_cov_ptr64 = gpuData.d_cross_cov_device_f64;
             double *observations_neighbors_copy_ptr64 = gpuData.d_observations_neighbors_copy_device_f64;
             double *observations_copy_ptr64 = gpuData.d_observations_copy_device_f64;
+            double *observations_neighbors_ptr64 = gpuData.d_observations_neighbors_device_f64;
+            double *observations_points_ptr64 = gpuData.d_observations_device_f64;
             double *mu_correction_ptr64 = gpuData.d_mu_correction_device_f64;
             double *cov_correction_ptr64 = gpuData.d_cov_correction_device_f64;
 
@@ -455,6 +477,8 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
                 gpuData.h_cov_array_f64[i] = cov_ptr64;
                 gpuData.h_conditioning_cov_array_f64[i] = conditioning_cov_ptr64;
                 gpuData.h_cross_cov_array_f64[i] = cross_cov_ptr64;
+                gpuData.h_observations_array_f64[i] = observations_points_ptr64;
+                gpuData.h_observations_neighbors_array_f64[i] = observations_neighbors_ptr64;
                 gpuData.h_observations_neighbors_copy_array_f64[i] = observations_neighbors_copy_ptr64;
                 gpuData.h_observations_copy_array_f64[i] = observations_copy_ptr64;
                 gpuData.h_mu_correction_array_f64[i] = mu_correction_ptr64;
@@ -467,6 +491,8 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
                 cross_cov_ptr64 += gpuData.ldda_conditioning_cov[i] * m_blocks;
                 observations_neighbors_copy_ptr64 += gpuData.ldda_neighbors[i];
                 observations_copy_ptr64 += gpuData.ldda_locs[i];
+                observations_neighbors_ptr64 += gpuData.ldda_neighbors[i];
+                observations_points_ptr64 += gpuData.ldda_locs[i];
                 mu_correction_ptr64 += gpuData.ldda_locs[i];
                 cov_correction_ptr64 += gpuData.ldda_cov[i] * m_blocks;
             }
@@ -479,6 +505,8 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             checkCudaError(cudaMalloc(&gpuData.d_conditioning_cov_array_f64, blocks * sizeof(double*)));
             checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_array_f64, blocks * sizeof(double*)));
             checkCudaError(cudaMalloc(&gpuData.d_observations_copy_array_f64, blocks * sizeof(double*)));
+            checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_array_f64, blocks * sizeof(double*)));
+            checkCudaError(cudaMalloc(&gpuData.d_observations_points_array_f64, blocks * sizeof(double*)));
             checkCudaError(cudaMalloc(&gpuData.d_mu_correction_array_f64, blocks * sizeof(double*)));
             checkCudaError(cudaMalloc(&gpuData.d_cov_correction_array_f64, blocks * sizeof(double*)));
 
@@ -490,13 +518,46 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             checkCudaError(cudaMemcpy(gpuData.d_conditioning_cov_array_f64, gpuData.h_conditioning_cov_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
             checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_array_f64, gpuData.h_observations_neighbors_copy_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
             checkCudaError(cudaMemcpy(gpuData.d_observations_copy_array_f64, gpuData.h_observations_copy_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
+            checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_array_f64, gpuData.h_observations_neighbors_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
+            checkCudaError(cudaMemcpy(gpuData.d_observations_points_array_f64, gpuData.h_observations_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
             checkCudaError(cudaMemcpy(gpuData.d_mu_correction_array_f64, gpuData.h_mu_correction_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
             checkCudaError(cudaMemcpy(gpuData.d_cov_correction_array_f64, gpuData.h_cov_correction_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
 
-            // convert static locations once
-            convert_array<double, float>(gpuData.d_locs_device, gpuData.d_locs_device_f64, (size_t)(total_locs_size_device/sizeof(float)), opts.stream);
-            convert_array<double, float>(gpuData.d_locs_neighbors_device, gpuData.d_locs_neighbors_device_f64, (size_t)(total_locs_nearestNeighbors_size_device/sizeof(float)), opts.stream);
-            checkCudaError(cudaStreamSynchronize(opts.stream));
+            // populate static locations and observations in double directly from host to avoid precision loss
+            // copy locations (coalesced) into double device arrays
+            size_t index_locs64 = 0;
+            size_t index_locs_nn64 = 0;
+            double *locs_ptr64w = gpuData.d_locs_device_f64;
+            double *locs_nn_ptr64w = gpuData.d_locs_neighbors_device_f64;
+            for (size_t i = 0; i < blocks; ++i) {
+                int m_blocks = gpuData.lda_locs[i];
+                int m_nearest_neighbor = gpuData.lda_locs_neighbors[i];
+                for (int d = 0; d < opts.dim; ++d) {
+                    checkCudaError(cudaMemcpy(locs_ptr64w + d * _total_locs_num_device,
+                                              locs_blocks_data64.data() + index_locs64 + d * _total_locs_num_host,
+                                              (size_t)m_blocks * sizeof(double), cudaMemcpyHostToDevice));
+                    checkCudaError(cudaMemcpy(locs_nn_ptr64w + d * _total_locs_nearestNeighbors_num_device,
+                                              locs_nearestNeighbors_data64.data() + index_locs_nn64 + d * _total_locs_nearestNeighbors_num_host,
+                                              (size_t)m_nearest_neighbor * sizeof(double), cudaMemcpyHostToDevice));
+                }
+                // observations to double
+                {
+                    std::vector<double> tmp_obs_d(m_blocks);
+                    for (int t=0; t<m_blocks; ++t) tmp_obs_d[t] = (double)blockInfos[i].observations_blocks[t];
+                    checkCudaError(cudaMemcpy(observations_points_ptr64, tmp_obs_d.data(), (size_t)m_blocks * sizeof(double), cudaMemcpyHostToDevice));
+                }
+                {
+                    std::vector<double> tmp_obs_nn_d(m_nearest_neighbor);
+                    for (int t=0; t<m_nearest_neighbor; ++t) tmp_obs_nn_d[t] = (double)blockInfos[i].observations_nearestNeighbors[t];
+                    checkCudaError(cudaMemcpy(observations_neighbors_ptr64, tmp_obs_nn_d.data(), (size_t)m_nearest_neighbor * sizeof(double), cudaMemcpyHostToDevice));
+                }
+                locs_ptr64w += gpuData.ldda_locs[i];
+                locs_nn_ptr64w += gpuData.ldda_neighbors[i];
+                index_locs64 += m_blocks;
+                index_locs_nn64 += m_nearest_neighbor;
+                observations_points_ptr64 += gpuData.ldda_locs[i];
+                observations_neighbors_ptr64 += gpuData.ldda_neighbors[i];
+            }
         }
     }
 

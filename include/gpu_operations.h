@@ -89,6 +89,8 @@ struct GpuDataT
     // Device contiguous buffers (allocated only if requested via opts)
     double *d_locs_device_f64 = nullptr;
     double *d_locs_neighbors_device_f64 = nullptr;
+    double *d_observations_device_f64 = nullptr;
+    double *d_observations_neighbors_device_f64 = nullptr;
     double *d_cov_device_f64 = nullptr;
     double *d_cross_cov_device_f64 = nullptr;
     double *d_conditioning_cov_device_f64 = nullptr;
@@ -101,6 +103,8 @@ struct GpuDataT
     // Host arrays of pointers for double-precision matrices/vectors
     double **h_locs_array_f64 = nullptr;
     double **h_locs_neighbors_array_f64 = nullptr;
+    double **h_observations_array_f64 = nullptr;
+    double **h_observations_neighbors_array_f64 = nullptr;
     double **h_cov_array_f64 = nullptr;
     double **h_cross_cov_array_f64 = nullptr;
     double **h_conditioning_cov_array_f64 = nullptr;
@@ -112,6 +116,8 @@ struct GpuDataT
     // Device arrays of pointers for double-precision
     double **d_locs_array_f64 = nullptr;
     double **d_locs_neighbors_array_f64 = nullptr;
+    double **d_observations_points_array_f64 = nullptr;
+    double **d_observations_neighbors_array_f64 = nullptr;
     double **d_cov_array_f64 = nullptr;
     double **d_cross_cov_array_f64 = nullptr;
     double **d_conditioning_cov_array_f64 = nullptr;
