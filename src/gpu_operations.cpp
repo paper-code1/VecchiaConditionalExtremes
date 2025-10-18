@@ -473,31 +473,37 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     checkCudaError(cudaStreamSynchronize(stream));
     
     timeGpu("covariance_blocks", [&]{
-        compute_covariance_vbatched<Real>(gpuData.d_locs_array,
+        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_array,
                     gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                     gpuData.d_locs_array,
                     gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                     gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
                     batchCount,
-                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+                    opts.dim, theta, gpuData.d_range_device, true,
+                    (int)max_n1, (int)max_n1,
+                    stream, opts);
     });
     timeGpu("cross_covariance", [&]{
-        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_neighbors_array,
                     gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.d_locs_array,
                     gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                     gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
                     batchCount,
-                    opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+                    opts.dim, theta, gpuData.d_range_device, false,
+                    (int)max_m, (int)max_n1,
+                    stream, opts);
     });
     timeGpu("conditioning_covariance", [&]{
-        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_neighbors_array,
                     gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.d_locs_neighbors_array,
                     gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
                     batchCount,
-                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+                    opts.dim, theta, gpuData.d_range_device, true,
+                    (int)max_m, (int)max_m,
+                    stream, opts);
     });
     
     // cholesky factorization
@@ -547,16 +553,16 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
 
     // 2.2 compute the conditional mean and variance using batched kernels
     timeGpu("matrix_add_covariance_update", [&]{
-        batched_matrix_add<Real>(
+        batched_matrix_add_fast<Real>(
             gpuData.d_cov_array, gpuData.d_ldda_cov,
             gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-            -1.0, batchCount, stream);
+            -1.0, batchCount, (int)max_n1, stream);
     });
     timeGpu("vector_add_mu_update", [&]{
-        batched_vector_add<Real>(
+        batched_vector_add_fast<Real>(
             gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
             gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-            -1.0, batchCount, stream);
+            -1.0, batchCount, (int)max_n1, stream);
     }); 
     checkCudaError(cudaStreamSynchronize(stream));
 
@@ -591,13 +597,13 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
     if (rank == 0) {
-        std::cout << "GPU timings (ms) - Vecchia likelihood:" << std::endl;
+        std::cout << "[GPU_TIMER] scope=vecchia_likelihood unit=ms" << std::endl;
         double total_ms = 0.0;
         for (size_t i = 0; i < gpuTimings.size(); ++i) {
-            std::cout << "  " << gpuTimings[i].label << ": " << gpuTimings[i].ms << std::endl;
+            std::cout << "[GPU_TIMER] op=" << gpuTimings[i].label << " ms=" << gpuTimings[i].ms << std::endl;
             total_ms += gpuTimings[i].ms;
         }
-        std::cout << "  total: " << total_ms << std::endl;
+        std::cout << "[GPU_TIMER] op=total ms=" << total_ms << std::endl;
     }
     
     return log_likelihood_all;

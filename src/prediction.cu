@@ -94,31 +94,37 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuDataT<Real> &
     // Use the data on the GPU for computation
     // 1. generate the covariance matrix, cross covariance matrix, conditioning covariance matrix
     timeGpu("covariance_blocks", [&]{
-        compute_covariance_vbatched<Real>(gpuData.d_locs_array,
+        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_array,
                     gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                     gpuData.d_locs_array,
                     gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                     gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
                     batchCount,
-                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+                opts.dim, theta, gpuData.d_range_device, true,
+                (int)max_n1, (int)max_n1,
+                stream, opts);
     });
     timeGpu("cross_covariance", [&]{
-        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_neighbors_array,
                     gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.d_locs_array,
                     gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                     gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
                     batchCount,
-                    opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+                opts.dim, theta, gpuData.d_range_device, false,
+                (int)max_m, (int)max_n1,
+                stream, opts);
     });
     timeGpu("conditioning_covariance", [&]{
-        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_neighbors_array,
                     gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.d_locs_neighbors_array,
                     gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                     gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
                     batchCount,
-                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+                opts.dim, theta, gpuData.d_range_device, true,
+                (int)max_m, (int)max_m,
+                stream, opts);
     });
     // Synchronize to make sure the kernel has finished
     checkCudaError(cudaStreamSynchronize(stream));
@@ -284,13 +290,13 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuDataT<Real> &
 
     // Print results
     if (rank == 0) {
-        std::cout << "GPU timings (ms) - Vecchia prediction:" << std::endl;
+        std::cout << "[GPU_TIMER] scope=vecchia_prediction unit=ms" << std::endl;
         double total_ms = 0.0;
         for (size_t i = 0; i < gpuTimings.size(); ++i) {
-            std::cout << "  " << gpuTimings[i].label << ": " << gpuTimings[i].ms << std::endl;
+            std::cout << "[GPU_TIMER] op=" << gpuTimings[i].label << " ms=" << gpuTimings[i].ms << std::endl;
             total_ms += gpuTimings[i].ms;
         }
-        std::cout << "  total: " << total_ms << std::endl;
+        std::cout << "[GPU_TIMER] op=total ms=" << total_ms << std::endl;
         std::cout << "MSPE: " << mspe << std::endl;
         std::cout << "RMSPE: " << rmspe << "%" << std::endl;
         std::cout << "95% CI coverage: " << ci_coverage * 100 << "%" << std::endl;

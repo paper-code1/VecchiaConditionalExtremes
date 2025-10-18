@@ -868,6 +868,59 @@ void compute_covariance_vbatched(Real** d_X1, const int* ldx1, int incx1, int st
     }
 }
 
+// Optimized variant with precomputed maxima to avoid thrust::reduce overhead
+template <typename Real>
+void compute_covariance_vbatched_fast(Real** d_X1, const int* ldx1, int incx1, int stridex1,
+                      Real** d_X2, const int* ldx2, int incx2, int stridex2,
+                      Real** d_C, const int* ldc, const int* n, 
+                      int batchCount,
+                      int dim, const std::vector<double> &theta, const Real* range,
+                      bool nugget_tag,
+                      int max_ldx1, int max_ldx2,
+                      cudaStream_t stream, const Opts &opts) {
+    switch (opts.kernel_type) {
+        case KernelType::Matern12:
+            Matern12_scaled_matcov_vbatched<Real>(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
+                stream);
+            break;
+        case KernelType::Matern32:
+            Matern32_scaled_matcov_vbatched<Real>(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
+                stream);
+            break;
+        case KernelType::Matern52:
+            Matern52_scaled_matcov_vbatched<Real>(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
+                stream);
+            break;
+        case KernelType::Matern72:
+            Matern72_scaled_matcov_vbatched<Real>(
+                d_X1, ldx1, incx1, stridex1,
+                d_X2, ldx2, incx2, stridex2,
+                d_C, ldc, n, dim, 
+                theta, range, nugget_tag,
+                max_ldx1, max_ldx2, batchCount,
+                stream);
+            break;
+        default:
+            throw std::runtime_error("Unsupported kernel type");
+            break;
+    }
+}
+
 // Batched matrix-matrix addition kernel
 template <typename Real>
 __global__ void batched_matrix_add_kernel(
@@ -947,6 +1000,27 @@ void batched_matrix_add(
     }
 }
 
+// Optimized variant to avoid per-call thrust reductions; accepts max_lda
+template <typename Real>
+void batched_matrix_add_fast(
+    Real** d_A_array, const int* ldda_A,
+    Real** d_B_array, const int* lda, const int* ldda_B,
+    Real alpha, int batchCount, int max_lda, cudaStream_t stream) {
+    if (batchCount <= 0) return;
+    dim3 blockDim(THREAD_X, THREAD_Y, 1);
+    const int gridx = (max_lda + blockDim.x - 1) / blockDim.x;
+    const int gridy = (max_lda + blockDim.y - 1) / blockDim.y;
+    const int max_batch = 65535;
+    for (int i = 0; i < batchCount; i += max_batch) {
+        int gridz = min(max_batch, batchCount - i);
+        dim3 gridDim(gridx, gridy, gridz);
+        batched_matrix_add_kernel<Real><<<gridDim, blockDim, 0, stream>>>(
+            d_A_array + i, ldda_A + i,
+            d_B_array + i, lda + i, ldda_B + i,
+            alpha, gridz);
+    }
+}
+
 // Batched matrix-vector addition wrapper function
 template <typename Real>
 void batched_vector_add(
@@ -969,6 +1043,26 @@ void batched_vector_add(
         int gridx = min(max_batch, batchCount - i);
         dim3 gridDim(gridx, gridy, 1);
         
+        batched_vector_add_kernel<Real><<<gridDim, blockDim, 0, stream>>>(
+            d_A_array + i, ldda_A + i,
+            d_B_array + i, lda + i, ldda_B + i,
+            alpha, gridx);
+    }
+}
+
+// Optimized variant to avoid per-call thrust reductions; accepts max_lda
+template <typename Real>
+void batched_vector_add_fast(
+    Real** d_A_array, const int* ldda_A,
+    Real** d_B_array, const int* lda, const int* ldda_B,
+    Real alpha, int batchCount, int max_lda, cudaStream_t stream) {
+    if (batchCount <= 0) return;
+    dim3 blockDim(1, THREADS_PER_BLOCK, 1);
+    const int gridy = (max_lda + blockDim.y - 1) / blockDim.y;
+    const int max_batch = 65535;
+    for (int i = 0; i < batchCount; i += max_batch) {
+        int gridx = min(max_batch, batchCount - i);
+        dim3 gridDim(gridx, gridy, 1);
         batched_vector_add_kernel<Real><<<gridDim, blockDim, 0, stream>>>(
             d_A_array + i, ldda_A + i,
             d_B_array + i, lda + i, ldda_B + i,
@@ -1000,8 +1094,14 @@ template void compute_covariance<float>(const float*, int, int, int, const float
 template void compute_covariance<double>(const double*, int, int, int, const double*, int, int, int, double*, int, int, int, const std::vector<double>&, const double*, bool, cudaStream_t, const Opts&);
 template void compute_covariance_vbatched<float>(float**, const int*, int, int, float**, const int*, int, int, float**, const int*, const int*, int, int, const std::vector<double>&, const float*, bool, cudaStream_t, const Opts&);
 template void compute_covariance_vbatched<double>(double**, const int*, int, int, double**, const int*, int, int, double**, const int*, const int*, int, int, const std::vector<double>&, const double*, bool, cudaStream_t, const Opts&);
+template void compute_covariance_vbatched_fast<float>(float**, const int*, int, int, float**, const int*, int, int, float**, const int*, const int*, int, int, const std::vector<double>&, const float*, bool, int, int, cudaStream_t, const Opts&);
+template void compute_covariance_vbatched_fast<double>(double**, const int*, int, int, double**, const int*, int, int, double**, const int*, const int*, int, int, const std::vector<double>&, const double*, bool, int, int, cudaStream_t, const Opts&);
 // Do not explicitly instantiate __global__ kernels with template syntax; only host wrappers need instantiation.
 template void batched_matrix_add<float>(float**, const int*, float**, const int*, const int*, float, int, cudaStream_t);
 template void batched_matrix_add<double>(double**, const int*, double**, const int*, const int*, double, int, cudaStream_t);
+template void batched_matrix_add_fast<float>(float**, const int*, float**, const int*, const int*, float, int, int, cudaStream_t);
+template void batched_matrix_add_fast<double>(double**, const int*, double**, const int*, const int*, double, int, int, cudaStream_t);
 template void batched_vector_add<float>(float**, const int*, float**, const int*, const int*, float, int, cudaStream_t);
 template void batched_vector_add<double>(double**, const int*, double**, const int*, const int*, double, int, cudaStream_t);
+template void batched_vector_add_fast<float>(float**, const int*, float**, const int*, const int*, float, int, int, cudaStream_t);
+template void batched_vector_add_fast<double>(double**, const int*, double**, const int*, const int*, double, int, int, cudaStream_t);
