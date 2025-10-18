@@ -138,8 +138,4 @@ void batched_vector_add(
     Real** d_B_array, const int* lda, const int* ldda_B,
     Real alpha, int batchCount, cudaStream_t stream);
 
-// Type conversion utilities
-template <typename Tout, typename Tin>
-void convert_array(const Tin* d_in, Tout* d_out, size_t num_elements, cudaStream_t stream);
-
 #endif // GPU_COVARIANCE_H

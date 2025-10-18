@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string>
 #include <mpi.h>
 #include <magma_v2.h>
 #include <sys/cdefs.h>
@@ -7,7 +8,6 @@
 #include "flops.h"
 #include "error_checking.h"
 #include "magma_dprint_gpu.h"
-#include <type_traits>
 
 template <typename Real>
 struct MagmaOps;
@@ -183,9 +183,6 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     gpuData.total_observations_neighbors_size = total_observations_nearestNeighbors_size;
     gpuData.total_locs_num_device = total_locs_size_device/sizeof(Real)/opts.dim;
     gpuData.total_locs_neighbors_num_device = total_locs_nearestNeighbors_size_device/sizeof(Real)/opts.dim;
-    gpuData.total_cov_size_bytes = total_cov_size;
-    gpuData.total_cross_cov_size_bytes = total_cross_cov_size;
-    gpuData.total_conditioning_cov_size_bytes = total_conditioning_cov_size;
     checkCudaError(cudaMalloc(&gpuData.d_locs_device, total_locs_size_device));
     checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_device, total_locs_nearestNeighbors_size_device));
     checkCudaError(cudaMalloc(&gpuData.d_observations_device, total_observations_points_size));
@@ -214,9 +211,6 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     // Prepare to store blocks data for coalesced memory access
     Real *locs_blocks_data = new Real[total_locs_size_host/sizeof(Real)];
     Real *locs_nearestNeighbors_data = new Real[total_locs_nearestNeighbors_size_host/sizeof(Real)];
-    // Optional host-side double copies to avoid precision loss when feeding double kernels
-    std::vector<double> locs_blocks_data64;
-    std::vector<double> locs_nearestNeighbors_data64;
 
     size_t locs_index = 0;
     size_t locs_nearestNeighbors_index = 0;
@@ -234,12 +228,6 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             for (int d = 0; d < opts.dim; ++d)
             {
                 locs_blocks_data[locs_index + d * _total_locs_num_host] = static_cast<Real>(blockInfos[i].blocks[j][d]);
-                if constexpr (std::is_same<Real, float>::value) {
-                    if (locs_blocks_data64.empty()) {
-                        locs_blocks_data64.resize((size_t)_total_locs_num_host * opts.dim);
-                    }
-                    locs_blocks_data64[(size_t)locs_index + (size_t)d * _total_locs_num_host] = blockInfos[i].blocks[j][d];
-                }
             }
             locs_index++;
         }
@@ -248,12 +236,6 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
             for (int d = 0; d < opts.dim; ++d)
             {
                 locs_nearestNeighbors_data[locs_nearestNeighbors_index + d * _total_locs_nearestNeighbors_num_host] = static_cast<Real>(blockInfos[i].nearestNeighbors[j][d]);
-                if constexpr (std::is_same<Real, float>::value) {
-                    if (locs_nearestNeighbors_data64.empty()) {
-                        locs_nearestNeighbors_data64.resize((size_t)_total_locs_nearestNeighbors_num_host * opts.dim);
-                    }
-                    locs_nearestNeighbors_data64[(size_t)locs_nearestNeighbors_index + (size_t)d * _total_locs_nearestNeighbors_num_host] = blockInfos[i].nearestNeighbors[j][d];
-                }
             }
             locs_nearestNeighbors_index++;
         }
@@ -421,146 +403,6 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     delete[] locs_blocks_data;
     delete[] locs_nearestNeighbors_data;
 
-    // Mixed-precision setup: allocate double mirrors if baseline Real=float and flags are enabled
-    if constexpr (std::is_same<Real, float>::value) {
-        bool need_double = (opts.precision == PrecisionType::Float) && (opts.mp_cov_double || opts.mp_schur_double || opts.mp_final_double || opts.mp_all_double_ops);
-        if (need_double) {
-            size_t blocks = blockInfos.size();
-            // allocate contiguous double buffers
-            checkCudaError(cudaMalloc(&gpuData.d_locs_device_f64, (size_t)((total_locs_size_device/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_device_f64, (size_t)((total_locs_nearestNeighbors_size_device/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_cov_device_f64, (size_t)((total_cov_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_cross_cov_device_f64, (size_t)((total_cross_cov_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_conditioning_cov_device_f64, (size_t)((total_conditioning_cov_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_device_f64, (size_t)((total_observations_nearestNeighbors_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_observations_copy_device_f64, (size_t)((total_observations_points_size/sizeof(float))*sizeof(double))));
-            // persistent double observations (optional, for precision)
-            checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_device_f64, (size_t)((total_observations_nearestNeighbors_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_observations_device_f64, (size_t)((total_observations_points_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_mu_correction_device_f64, (size_t)((total_observations_points_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_cov_correction_device_f64, (size_t)((total_cov_size/sizeof(float))*sizeof(double))));
-            checkCudaError(cudaMalloc(&gpuData.d_range_device_f64, opts.dim * sizeof(double)));
-
-            // host arrays for double pointers
-            gpuData.h_locs_array_f64 = new double*[blocks * opts.dim];
-            gpuData.h_locs_neighbors_array_f64 = new double*[blocks * opts.dim];
-            gpuData.h_cov_array_f64 = new double*[blocks];
-            gpuData.h_cross_cov_array_f64 = new double*[blocks];
-            gpuData.h_conditioning_cov_array_f64 = new double*[blocks];
-            gpuData.h_observations_neighbors_copy_array_f64 = new double*[blocks];
-            gpuData.h_observations_copy_array_f64 = new double*[blocks];
-            gpuData.h_observations_array_f64 = new double*[blocks];
-            gpuData.h_observations_neighbors_array_f64 = new double*[blocks];
-            gpuData.h_mu_correction_array_f64 = new double*[blocks];
-            gpuData.h_cov_correction_array_f64 = new double*[blocks];
-
-            // assign per-batch pointers mirroring float layout
-            double *locs_ptr64 = gpuData.d_locs_device_f64;
-            double *locs_neighbors_ptr64 = gpuData.d_locs_neighbors_device_f64;
-            double *cov_ptr64 = gpuData.d_cov_device_f64;
-            double *conditioning_cov_ptr64 = gpuData.d_conditioning_cov_device_f64;
-            double *cross_cov_ptr64 = gpuData.d_cross_cov_device_f64;
-            double *observations_neighbors_copy_ptr64 = gpuData.d_observations_neighbors_copy_device_f64;
-            double *observations_copy_ptr64 = gpuData.d_observations_copy_device_f64;
-            double *observations_neighbors_ptr64 = gpuData.d_observations_neighbors_device_f64;
-            double *observations_points_ptr64 = gpuData.d_observations_device_f64;
-            double *mu_correction_ptr64 = gpuData.d_mu_correction_device_f64;
-            double *cov_correction_ptr64 = gpuData.d_cov_correction_device_f64;
-
-            for (size_t i = 0; i < blocks; ++i) {
-                int m_blocks = gpuData.lda_locs[i];
-                int m_nearest_neighbor = gpuData.lda_locs_neighbors[i];
-                for (int d = 0; d < opts.dim; ++d) {
-                    gpuData.h_locs_array_f64[i + blocks * d] = locs_ptr64 + blocks * d;
-                    gpuData.h_locs_neighbors_array_f64[i + blocks * d] = locs_neighbors_ptr64 + blocks * d;
-                }
-                gpuData.h_cov_array_f64[i] = cov_ptr64;
-                gpuData.h_conditioning_cov_array_f64[i] = conditioning_cov_ptr64;
-                gpuData.h_cross_cov_array_f64[i] = cross_cov_ptr64;
-                gpuData.h_observations_array_f64[i] = observations_points_ptr64;
-                gpuData.h_observations_neighbors_array_f64[i] = observations_neighbors_ptr64;
-                gpuData.h_observations_neighbors_copy_array_f64[i] = observations_neighbors_copy_ptr64;
-                gpuData.h_observations_copy_array_f64[i] = observations_copy_ptr64;
-                gpuData.h_mu_correction_array_f64[i] = mu_correction_ptr64;
-                gpuData.h_cov_correction_array_f64[i] = cov_correction_ptr64;
-
-                locs_ptr64 += gpuData.ldda_locs[i];
-                locs_neighbors_ptr64 += gpuData.ldda_neighbors[i];
-                cov_ptr64 += gpuData.ldda_cov[i] * m_blocks;
-                conditioning_cov_ptr64 += gpuData.ldda_conditioning_cov[i] * m_nearest_neighbor;
-                cross_cov_ptr64 += gpuData.ldda_conditioning_cov[i] * m_blocks;
-                observations_neighbors_copy_ptr64 += gpuData.ldda_neighbors[i];
-                observations_copy_ptr64 += gpuData.ldda_locs[i];
-                observations_neighbors_ptr64 += gpuData.ldda_neighbors[i];
-                observations_points_ptr64 += gpuData.ldda_locs[i];
-                mu_correction_ptr64 += gpuData.ldda_locs[i];
-                cov_correction_ptr64 += gpuData.ldda_cov[i] * m_blocks;
-            }
-
-            // device arrays of double pointers
-            checkCudaError(cudaMalloc(&gpuData.d_locs_array_f64, blocks * opts.dim * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_locs_neighbors_array_f64, blocks * opts.dim * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_cov_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_cross_cov_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_conditioning_cov_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_observations_copy_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_observations_points_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_mu_correction_array_f64, blocks * sizeof(double*)));
-            checkCudaError(cudaMalloc(&gpuData.d_cov_correction_array_f64, blocks * sizeof(double*)));
-
-            // copy host pointer arrays to device
-            checkCudaError(cudaMemcpy(gpuData.d_locs_array_f64, gpuData.h_locs_array_f64, blocks * opts.dim * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_locs_neighbors_array_f64, gpuData.h_locs_neighbors_array_f64, blocks * opts.dim * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_cov_array_f64, gpuData.h_cov_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_cross_cov_array_f64, gpuData.h_cross_cov_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_conditioning_cov_array_f64, gpuData.h_conditioning_cov_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_array_f64, gpuData.h_observations_neighbors_copy_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_observations_copy_array_f64, gpuData.h_observations_copy_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_array_f64, gpuData.h_observations_neighbors_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_observations_points_array_f64, gpuData.h_observations_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_mu_correction_array_f64, gpuData.h_mu_correction_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_cov_correction_array_f64, gpuData.h_cov_correction_array_f64, blocks * sizeof(double*), cudaMemcpyHostToDevice));
-
-            // populate static locations and observations in double directly from host to avoid precision loss
-            // copy locations (coalesced) into double device arrays
-            size_t index_locs64 = 0;
-            size_t index_locs_nn64 = 0;
-            double *locs_ptr64w = gpuData.d_locs_device_f64;
-            double *locs_nn_ptr64w = gpuData.d_locs_neighbors_device_f64;
-            for (size_t i = 0; i < blocks; ++i) {
-                int m_blocks = gpuData.lda_locs[i];
-                int m_nearest_neighbor = gpuData.lda_locs_neighbors[i];
-                for (int d = 0; d < opts.dim; ++d) {
-                    checkCudaError(cudaMemcpy(locs_ptr64w + d * _total_locs_num_device,
-                                              locs_blocks_data64.data() + index_locs64 + d * _total_locs_num_host,
-                                              (size_t)m_blocks * sizeof(double), cudaMemcpyHostToDevice));
-                    checkCudaError(cudaMemcpy(locs_nn_ptr64w + d * _total_locs_nearestNeighbors_num_device,
-                                              locs_nearestNeighbors_data64.data() + index_locs_nn64 + d * _total_locs_nearestNeighbors_num_host,
-                                              (size_t)m_nearest_neighbor * sizeof(double), cudaMemcpyHostToDevice));
-                }
-                // observations to double
-                {
-                    std::vector<double> tmp_obs_d(m_blocks);
-                    for (int t=0; t<m_blocks; ++t) tmp_obs_d[t] = (double)blockInfos[i].observations_blocks[t];
-                    checkCudaError(cudaMemcpy(observations_points_ptr64, tmp_obs_d.data(), (size_t)m_blocks * sizeof(double), cudaMemcpyHostToDevice));
-                }
-                {
-                    std::vector<double> tmp_obs_nn_d(m_nearest_neighbor);
-                    for (int t=0; t<m_nearest_neighbor; ++t) tmp_obs_nn_d[t] = (double)blockInfos[i].observations_nearestNeighbors[t];
-                    checkCudaError(cudaMemcpy(observations_neighbors_ptr64, tmp_obs_nn_d.data(), (size_t)m_nearest_neighbor * sizeof(double), cudaMemcpyHostToDevice));
-                }
-                locs_ptr64w += gpuData.ldda_locs[i];
-                locs_nn_ptr64w += gpuData.ldda_neighbors[i];
-                index_locs64 += m_blocks;
-                index_locs_nn64 += m_nearest_neighbor;
-                observations_points_ptr64 += gpuData.ldda_locs[i];
-                observations_neighbors_ptr64 += gpuData.ldda_neighbors[i];
-            }
-        }
-    }
-
     return gpuData;
 }
 
@@ -576,6 +418,23 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     // set the stream
     cudaStream_t stream=opts.stream;
     magma_queue_t queue = opts.queue;
+    
+    struct TimingRecord { const char* label; float ms; };
+    std::vector<TimingRecord> gpuTimings;
+    auto timeGpu = [&](const char* label, auto&& fn){
+        cudaEvent_t evStart, evStop;
+        checkCudaError(cudaEventCreate(&evStart));
+        checkCudaError(cudaEventCreate(&evStop));
+        checkCudaError(cudaEventRecord(evStart, stream));
+        fn();
+        checkCudaError(cudaEventRecord(evStop, stream));
+        checkCudaError(cudaEventSynchronize(evStop));
+        float ms = 0.0f;
+        checkCudaError(cudaEventElapsedTime(&ms, evStart, evStop));
+        gpuTimings.push_back({label, ms});
+        checkCudaError(cudaEventDestroy(evStart));
+        checkCudaError(cudaEventDestroy(evStop));
+    };
     
     size_t batchCount = gpuData.ldda_locs.size() - 1;
     magma_int_t *dinfo_magma = gpuData.dinfo_magma;
@@ -594,252 +453,154 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
 
 
     // copy the data from the device to the device
-    checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_device, 
-                                   gpuData.d_observations_neighbors_device, 
-                                   gpuData.total_observations_neighbors_size, 
+    timeGpu("copy_obs_neighbors_d2d", [&]{
+        checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_device,
+                                   gpuData.d_observations_neighbors_device,
+                                   gpuData.total_observations_neighbors_size,
                                    cudaMemcpyDeviceToDevice));
-    checkCudaError(cudaMemcpy(gpuData.d_observations_copy_device, 
-                                   gpuData.d_observations_device, 
-                                   gpuData.total_observations_points_size, 
+    });
+    timeGpu("copy_obs_points_d2d", [&]{
+        checkCudaError(cudaMemcpy(gpuData.d_observations_copy_device,
+                                   gpuData.d_observations_device,
+                                   gpuData.total_observations_points_size,
                                    cudaMemcpyDeviceToDevice));
-    {
+    });
+    timeGpu("copy_range_h2d", [&]{
         std::vector<Real> range_host(opts.dim);
         for (int i=0;i<opts.dim;++i) range_host[i] = static_cast<Real>(theta[range_offset + i]);
         checkCudaError(cudaMemcpy(gpuData.d_range_device, range_host.data(), opts.dim * sizeof(Real), cudaMemcpyHostToDevice));
-    }
+    });
     checkCudaError(cudaStreamSynchronize(stream));
-
-    // CUDA event timers
-    cudaEvent_t e0,e1; cudaEventCreate(&e0); cudaEventCreate(&e1);
-
-    if constexpr (std::is_same<Real, double>::value) {
-        cudaEventRecord(e0, stream);
+    
+    timeGpu("covariance_blocks", [&]{
         compute_covariance_vbatched<Real>(gpuData.d_locs_array,
-                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_locs_array,
-                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
-                batchCount,
-                opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
-                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_locs_array,
-                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
-                batchCount,
-                opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+                    gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                    gpuData.d_locs_array,
+                    gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                    gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
+                    batchCount,
+                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    });
+    timeGpu("cross_covariance", [&]{
         compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
-                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_locs_neighbors_array, 
-                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
-                batchCount,
-                opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_cov_self, e0, e1);
-        cudaEventRecord(e0, stream);
-        // reuse measured segments crudely (we measured collectively above, so split evenly if needed)
-        // Here we attribute entire block set as single stages; for more granular, place events around each call separately.
-        // For now, approximate by equal thirds for the three cov calls to populate t_cov_self/cross/cond.
-        opts.t_cov_cross = opts.t_cov_self;
-        opts.t_cov_cond = opts.t_cov_self;
-
-        cudaEventRecord(e0, stream);
+                    gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                    gpuData.d_locs_array,
+                    gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                    gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
+                    batchCount,
+                    opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+    });
+    timeGpu("conditioning_covariance", [&]{
+        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+                    gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                    gpuData.d_locs_neighbors_array,
+                    gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                    gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
+                    batchCount,
+                    opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    });
     
     // cholesky factorization
-    MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_potrf_neighbors, e0, e1);
-        cudaEventRecord(e0, stream);
+    timeGpu("chol_conditioning", [&]{
+        MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
+    });
     // trsm
-    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-                        max_m, max_n1,
-                        d_lda_locs_neighbors, d_lda_locs,
-                        (Real)1.0,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                        batchCount, queue);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_trsm_cross, e0, e1);
-        cudaEventRecord(e0, stream);
-    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-                        max_m, max_n2,
-                        d_lda_locs_neighbors, d_const1,
-                        (Real)1.0,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                        batchCount, queue);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_trsm_obs, e0, e1);
-        cudaEventRecord(e0, stream);
+    timeGpu("trsm_cross_cov", [&]{
+        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                            max_m, max_n1,
+                            d_lda_locs_neighbors, d_lda_locs,
+                            (Real)1.0,
+                            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+                            gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                            batchCount, queue);
+    });
+    timeGpu("trsm_mu", [&]{
+        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                            max_m, max_n2,
+                            d_lda_locs_neighbors, d_const1,
+                            (Real)1.0,
+                            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+                            gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                            batchCount, queue);
+    });
     // gemm
-    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                             d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
-                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             (Real)0.0, gpuData.d_cov_correction_array, d_ldda_cov,
-                             batchCount,
-                             max_n1, max_n1, max_m,
-                             queue);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_gemm_covcorr, e0, e1);
-        cudaEventRecord(e0, stream);
-    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                             d_lda_locs, d_const1, d_lda_locs_neighbors,
-                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                             (Real)0.0, gpuData.d_mu_correction_array, d_ldda_locs,
-                             batchCount,
-                             max_n1, max_n2, max_m,
-                             queue);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_gemm_mucorr, e0, e1);
+    timeGpu("gemm_cov_correction", [&]{
+        MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
+                                 d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
+                                 (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                                 gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                                 (Real)0.0, gpuData.d_cov_correction_array, d_ldda_cov,
+                                 batchCount,
+                                 max_n1, max_n1, max_m,
+                                 queue);
+    });
+    timeGpu("gemm_mu_correction", [&]{
+        MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
+                                 d_lda_locs, d_const1, d_lda_locs_neighbors,
+                                 (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                                 gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                                 (Real)0.0, gpuData.d_mu_correction_array, d_ldda_locs,
+                                 batchCount,
+                                 max_n1, max_n2, max_m,
+                                 queue);
+    });
 
     // 2.2 compute the conditional mean and variance using batched kernels
-        cudaEventRecord(e0, stream);
-    batched_matrix_add<Real>(
-        gpuData.d_cov_array, gpuData.d_ldda_cov,
-        gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-        -1.0, batchCount, stream);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_batched_matadd, e0, e1);
-        cudaEventRecord(e0, stream);
-    batched_vector_add<Real>(
-        gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
-        gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-        -1.0, batchCount, stream); 
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_batched_vecadd, e0, e1);
+    timeGpu("matrix_add_covariance_update", [&]{
+        batched_matrix_add<Real>(
+            gpuData.d_cov_array, gpuData.d_ldda_cov,
+            gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
+            -1.0, batchCount, stream);
+    });
+    timeGpu("vector_add_mu_update", [&]{
+        batched_vector_add<Real>(
+            gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
+            gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
+            -1.0, batchCount, stream);
+    }); 
     checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
-        cudaEventRecord(e0, stream);
-    MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_potrf_final, e0, e1);
-        cudaEventRecord(e0, stream);
-    MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-        d_lda_locs, d_const1, (Real)1.0,
-        gpuData.d_cov_array, d_ldda_cov,
-        gpuData.d_observations_copy_array, d_ldda_locs,
-        batchCount, queue);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_trsm_final, e0, e1);
+    timeGpu("chol_blocks", [&]{
+        MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
+    });
+    timeGpu("trsm_solve_mu", [&]{
+        MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+            d_lda_locs, d_const1, (Real)1.0,
+            gpuData.d_cov_array, d_ldda_cov,
+            gpuData.d_observations_copy_array, d_ldda_locs,
+            batchCount, queue);
+    });
 
-        // norm for all blocks
-        cudaEventRecord(e0, stream);
-        double norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
-        // determinant for all blocks
-        double log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
-        cudaEventRecord(e1, stream); cudaEventSynchronize(e1); cudaEventElapsedTime(&opts.t_norm_det, e0, e1);
-        double log_likelihood = -0.5 * (log_det_item + norm2_item);
-        double log_likelihood_all = 0;
-        MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        if (rank == 0 && opts.print) {
-            std::cout << "Timing (ms) — cov_self: " << opts.t_cov_self
-                      << ", cov_cross: " << opts.t_cov_cross
-                      << ", cov_cond: " << opts.t_cov_cond
-                      << ", potrf_neighbors: " << opts.t_potrf_neighbors
-                      << ", trsm_cross: " << opts.t_trsm_cross
-                      << ", trsm_obs: " << opts.t_trsm_obs
-                      << ", gemm_covcorr: " << opts.t_gemm_covcorr
-                      << ", gemm_mucorr: " << opts.t_gemm_mucorr
-                      << ", batched_matadd: " << opts.t_batched_matadd
-                      << ", batched_vecadd: " << opts.t_batched_vecadd
-                      << ", potrf_final: " << opts.t_potrf_final
-                      << ", trsm_final: " << opts.t_trsm_final
-                      << ", norm+det: " << opts.t_norm_det
-                      << std::endl;
+    // norm for all blocks
+    double norm2_item = 0.0;
+    timeGpu("norm2_batch", [&]{
+        norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
+    });
+    // determinant for all blocks
+    double log_det_item = 0.0;
+    timeGpu("log_det_batch", [&]{
+        log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
+    });
+    // sum for log-likelihood
+    double log_likelihood = -0.5 *(
+        log_det_item + norm2_item // the constant term is removed for simplicity
+    );
+    double log_likelihood_all = 0;
+    // mpi sum for log-likelihood
+    MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    
+    if (rank == 0) {
+        std::cout << "GPU timings (ms) - Vecchia likelihood:" << std::endl;
+        double total_ms = 0.0;
+        for (size_t i = 0; i < gpuTimings.size(); ++i) {
+            std::cout << "  " << gpuTimings[i].label << ": " << gpuTimings[i].ms << std::endl;
+            total_ms += gpuTimings[i].ms;
         }
-        return log_likelihood_all;
-    } else {
-        // Real == float with optional mixed-precision routing
-        bool cov64 = opts.mp_cov_double || opts.mp_all_double_ops;
-        bool schur64 = opts.mp_schur_double || opts.mp_all_double_ops;
-        bool final64 = opts.mp_final_double || opts.mp_all_double_ops;
-
-        // prepare range in double if any double stage enabled
-        if (cov64 || schur64 || final64) {
-            std::vector<double> range_host64(opts.dim);
-            for (int i=0;i<opts.dim;++i) range_host64[i] = theta[range_offset + i];
-            checkCudaError(cudaMemcpy(gpuData.d_range_device_f64, range_host64.data(), opts.dim * sizeof(double), cudaMemcpyHostToDevice));
-        }
-
-        // covariance generation
-        if (cov64) {
-            compute_covariance_vbatched<double>(gpuData.d_locs_array_f64, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_locs_array_f64, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_cov_array_f64, gpuData.d_ldda_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device_f64, true, stream, opts);
-            compute_covariance_vbatched<double>(gpuData.d_locs_neighbors_array_f64, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_locs_array_f64, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_cross_cov_array_f64, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device_f64, false, stream, opts);
-            compute_covariance_vbatched<double>(gpuData.d_locs_neighbors_array_f64, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_locs_neighbors_array_f64, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_conditioning_cov_array_f64, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors, batchCount, opts.dim, theta, gpuData.d_range_device_f64, true, stream, opts);
-        } else {
-            compute_covariance_vbatched<float>(gpuData.d_locs_array, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_locs_array, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-            compute_covariance_vbatched<float>(gpuData.d_locs_neighbors_array, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_locs_array, gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs, batchCount, opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-            compute_covariance_vbatched<float>(gpuData.d_locs_neighbors_array, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_locs_neighbors_array, gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors, batchCount, opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-        }
-
-        // observation copies
-        if (schur64 || final64) {
-            convert_array<double, float>(gpuData.d_observations_neighbors_device, gpuData.d_observations_neighbors_copy_device_f64, (size_t)(gpuData.total_observations_neighbors_size/sizeof(float)), stream);
-            convert_array<double, float>(gpuData.d_observations_device, gpuData.d_observations_copy_device_f64, (size_t)(gpuData.total_observations_points_size/sizeof(float)), stream);
-        } else {
-            checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_device, gpuData.d_observations_neighbors_device, gpuData.total_observations_neighbors_size, cudaMemcpyDeviceToDevice));
-            checkCudaError(cudaMemcpy(gpuData.d_observations_copy_device, gpuData.d_observations_device, gpuData.total_observations_points_size, cudaMemcpyDeviceToDevice));
-        }
-
-        // Schur complement
-        if (schur64) {
-            if (!cov64) {
-                convert_array<double, float>(gpuData.d_conditioning_cov_device, gpuData.d_conditioning_cov_device_f64, (size_t)(gpuData.total_conditioning_cov_size_bytes/sizeof(float)), stream);
-                convert_array<double, float>(gpuData.d_cross_cov_device, gpuData.d_cross_cov_device_f64, (size_t)(gpuData.total_cross_cov_size_bytes/sizeof(float)), stream);
-            }
-            MagmaOps<double>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array_f64, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
-            MagmaOps<double>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n1, d_lda_locs_neighbors, d_lda_locs, 1.0, gpuData.d_conditioning_cov_array_f64, d_ldda_conditioning_cov, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, batchCount, queue);
-            MagmaOps<double>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n2, d_lda_locs_neighbors, d_const1, 1.0, gpuData.d_conditioning_cov_array_f64, d_ldda_conditioning_cov, gpuData.d_observations_neighbors_copy_array_f64, d_ldda_neighbors, batchCount, queue);
-            MagmaOps<double>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_lda_locs, d_lda_locs_neighbors, 1.0, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, 0.0, gpuData.d_cov_correction_array_f64, d_ldda_cov, batchCount, max_n1, max_n1, max_m, queue);
-            MagmaOps<double>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_const1, d_lda_locs_neighbors, 1.0, gpuData.d_cross_cov_array_f64, d_ldda_cross_cov, gpuData.d_observations_neighbors_copy_array_f64, d_ldda_neighbors, 0.0, gpuData.d_mu_correction_array_f64, d_ldda_locs, batchCount, max_n1, max_n2, max_m, queue);
-        } else {
-            MagmaOps<float>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
-            MagmaOps<float>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n1, d_lda_locs_neighbors, d_lda_locs, 1.0f, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, gpuData.d_cross_cov_array, d_ldda_cross_cov, batchCount, queue);
-            MagmaOps<float>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, max_m, max_n2, d_lda_locs_neighbors, d_const1, 1.0f, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors, batchCount, queue);
-            MagmaOps<float>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_lda_locs, d_lda_locs_neighbors, 1.0f, gpuData.d_cross_cov_array, d_ldda_cross_cov, gpuData.d_cross_cov_array, d_ldda_cross_cov, 0.0f, gpuData.d_cov_correction_array, d_ldda_cov, batchCount, max_n1, max_n1, max_m, queue);
-            MagmaOps<float>::gemm_max(MagmaTrans, MagmaNoTrans, d_lda_locs, d_const1, d_lda_locs_neighbors, 1.0f, gpuData.d_cross_cov_array, d_ldda_cross_cov, gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors, 0.0f, gpuData.d_mu_correction_array, d_ldda_locs, batchCount, max_n1, max_n2, max_m, queue);
-        }
-
-        // mean/variance combine and final
-        if (final64) {
-            if (!cov64) { convert_array<double, float>(gpuData.d_cov_device, gpuData.d_cov_device_f64, (size_t)(gpuData.total_cov_size_bytes/sizeof(float)), stream); }
-            if (!schur64) {
-                convert_array<double, float>(gpuData.d_cov_correction_device, gpuData.d_cov_correction_device_f64, (size_t)(gpuData.total_cov_size_bytes/sizeof(float)), stream);
-                convert_array<double, float>(gpuData.d_mu_correction_device, gpuData.d_mu_correction_device_f64, (size_t)(gpuData.total_observations_points_size/sizeof(float)), stream);
-            }
-            batched_matrix_add<double>(gpuData.d_cov_array_f64, gpuData.d_ldda_cov, gpuData.d_cov_correction_array_f64, gpuData.d_lda_locs, gpuData.d_ldda_locs, -1.0, batchCount, stream);
-            batched_vector_add<double>(gpuData.d_observations_copy_array_f64, gpuData.d_ldda_locs, gpuData.d_mu_correction_array_f64, gpuData.d_lda_locs, gpuData.d_ldda_locs, -1.0, batchCount, stream);
-            checkCudaError(cudaStreamSynchronize(stream));
-            MagmaOps<double>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array_f64, d_ldda_cov, dinfo_magma, batchCount, queue);
-            MagmaOps<double>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, d_lda_locs, d_const1, 1.0, gpuData.d_cov_array_f64, d_ldda_cov, gpuData.d_observations_copy_array_f64, d_ldda_locs, batchCount, queue);
-            double norm2_item = (double)norm2_batch<double>(d_lda_locs, const_cast<const double**>(gpuData.d_observations_copy_array_f64), d_ldda_locs, batchCount, stream);
-            double log_det_item = (double)log_det_batch<double>(d_lda_locs, const_cast<const double**>(gpuData.d_cov_array_f64), d_ldda_cov, batchCount, stream);
-            double log_likelihood = -0.5 * (log_det_item + norm2_item);
-            double log_likelihood_all = 0; MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); return log_likelihood_all;
-        } else {
-            if (schur64) {
-                convert_array<float, double>(gpuData.d_cov_correction_device_f64, gpuData.d_cov_correction_device, (size_t)(gpuData.total_cov_size_bytes/sizeof(float)), stream);
-                convert_array<float, double>(gpuData.d_mu_correction_device_f64, gpuData.d_mu_correction_device, (size_t)(gpuData.total_observations_points_size/sizeof(float)), stream);
-                if (cov64) { convert_array<float, double>(gpuData.d_cov_device_f64, gpuData.d_cov_device, (size_t)(gpuData.total_cov_size_bytes/sizeof(float)), stream); }
-                convert_array<float, double>(gpuData.d_observations_copy_device_f64, gpuData.d_observations_copy_device, (size_t)(gpuData.total_observations_points_size/sizeof(float)), stream);
-            }
-            batched_matrix_add<float>(gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs, -1.0f, batchCount, stream);
-            batched_vector_add<float>(gpuData.d_observations_copy_array, gpuData.d_ldda_locs, gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs, -1.0f, batchCount, stream);
-            checkCudaError(cudaStreamSynchronize(stream));
-            MagmaOps<float>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
-            MagmaOps<float>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit, d_lda_locs, d_const1, 1.0f, gpuData.d_cov_array, d_ldda_cov, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, queue);
-            double norm2_item = (double)norm2_batch<float>(d_lda_locs, const_cast<const float**>(gpuData.d_observations_copy_array), d_ldda_locs, batchCount, stream);
-            double log_det_item = (double)log_det_batch<float>(d_lda_locs, const_cast<const float**>(gpuData.d_cov_array), d_ldda_cov, batchCount, stream);
-            double log_likelihood = -0.5 * (log_det_item + norm2_item);
-            double log_likelihood_all = 0; MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); return log_likelihood_all;
-        }
+        std::cout << "  total: " << total_ms << std::endl;
     }
+    
+    return log_likelihood_all;
 }
 
 // Function to clean up GPU memory
@@ -867,36 +628,6 @@ void cleanupGpuMemory(GpuDataT<Real> &gpuData)
     delete[] gpuData.h_mu_correction_array;
     delete[] gpuData.h_cov_correction_array;
     delete[] gpuData.h_observations_neighbors_copy_array;
-
-    // Optional double-precision mirrors cleanup
-    cudaFree(gpuData.d_locs_device_f64);
-    cudaFree(gpuData.d_locs_neighbors_device_f64);
-    cudaFree(gpuData.d_cov_device_f64);
-    cudaFree(gpuData.d_cross_cov_device_f64);
-    cudaFree(gpuData.d_conditioning_cov_device_f64);
-    cudaFree(gpuData.d_observations_neighbors_copy_device_f64);
-    cudaFree(gpuData.d_observations_copy_device_f64);
-    cudaFree(gpuData.d_mu_correction_device_f64);
-    cudaFree(gpuData.d_cov_correction_device_f64);
-    cudaFree(gpuData.d_range_device_f64);
-    delete[] gpuData.h_locs_array_f64;
-    delete[] gpuData.h_locs_neighbors_array_f64;
-    delete[] gpuData.h_cov_array_f64;
-    delete[] gpuData.h_cross_cov_array_f64;
-    delete[] gpuData.h_conditioning_cov_array_f64;
-    delete[] gpuData.h_observations_neighbors_copy_array_f64;
-    delete[] gpuData.h_observations_copy_array_f64;
-    delete[] gpuData.h_mu_correction_array_f64;
-    delete[] gpuData.h_cov_correction_array_f64;
-    cudaFree(gpuData.d_locs_array_f64);
-    cudaFree(gpuData.d_locs_neighbors_array_f64);
-    cudaFree(gpuData.d_cov_array_f64);
-    cudaFree(gpuData.d_cross_cov_array_f64);
-    cudaFree(gpuData.d_conditioning_cov_array_f64);
-    cudaFree(gpuData.d_observations_neighbors_copy_array_f64);
-    cudaFree(gpuData.d_observations_copy_array_f64);
-    cudaFree(gpuData.d_mu_correction_array_f64);
-    cudaFree(gpuData.d_cov_correction_array_f64);
 }
 
 // calculate the total flops

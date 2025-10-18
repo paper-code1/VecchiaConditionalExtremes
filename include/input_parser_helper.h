@@ -72,40 +72,11 @@ struct Opts
     int range_offset;
     PrecisionType precision;
 
-    // mixed precision controls (effective only when precision==Float)
-    // Back-compat grouped toggles
-    bool mp_cov_double;        // legacy: covariance generation
-    bool mp_schur_double;      // legacy: potrf_neighbors + trsm + gemm
-    bool mp_final_double;      // legacy: batched add + potrf_final + final trsm/loglike
-    bool mp_all_double_ops;    // convenience: enable all operations in double
-    // Fine-grained toggles
-    bool mp_covgen_double;         // covariance generation
-    bool mp_trsm_double;           // TRSM (both conditioning and final TRSM)
-    bool mp_gemm_double;           // GEMM in correction
-    bool mp_potrf_neighbors_double;// conditioning CHOL (neighbors)
-    bool mp_potrf_final_double;    // final CHOL (corrected covariance)
-    bool mp_batched_add_double;    // batched_matrix_add and batched_vector_add
-    bool mp_core_ops_double;       // preset: enable covgen, trsm, gemm, potrf_final, batched_add
-
     // timing
-    float time_covgen; // legacy aggregate
-    float time_cholesky_trsm_gemm; // legacy aggregate
-    float time_cholesky_trsm; // legacy aggregate
+    float time_covgen;
+    float time_cholesky_trsm_gemm;
+    float time_cholesky_trsm;
     float time_gpu_total;
-    // fine-grained stage timings (ms)
-    float t_cov_self;     // cov(X,X)
-    float t_cov_cross;    // cov(NN,X)
-    float t_cov_cond;     // cov(NN,NN)
-    float t_potrf_neighbors;
-    float t_trsm_cross;
-    float t_trsm_obs;
-    float t_gemm_covcorr;
-    float t_gemm_mucorr;
-    float t_batched_matadd;
-    float t_batched_vecadd;
-    float t_potrf_final;
-    float t_trsm_final;
-    float t_norm_det;
 
     // paths
     std::string train_metadata_path;
