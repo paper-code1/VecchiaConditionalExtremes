@@ -86,17 +86,6 @@ void compute_covariance_vbatched(Real** d_X1, const int* ldx1, int incx1, int st
                       bool nugget_tag,
                       cudaStream_t stream, const Opts &opts);
 
-// Optimized variant that skips on-device max reductions by accepting precomputed maxima
-template <typename Real>
-void compute_covariance_vbatched_fast(Real** d_X1, const int* ldx1, int incx1, int stridex1,
-                      Real** d_X2, const int* ldx2, int incx2, int stridex2,
-                      Real** d_C, const int* ldc, const int* n,
-                      int batchCount,
-                      int dim, const std::vector<double> &theta, const Real* range,
-                      bool nugget_tag,
-                      int max_ldx1, int max_ldx2,
-                      cudaStream_t stream, const Opts &opts);
-
 
 template <typename Real>
 __global__ void norm2_batch_kernel(
@@ -144,21 +133,9 @@ void batched_matrix_add(
     Real alpha, int batchCount, cudaStream_t stream);
 
 template <typename Real>
-void batched_matrix_add_fast(
-    Real** d_A_array, const int* ldda_A,
-    Real** d_B_array, const int* lda, const int* ldda_B,
-    Real alpha, int batchCount, int max_lda, cudaStream_t stream);
-
-template <typename Real>
 void batched_vector_add(
     Real** d_A_array, const int* ldda_A,
     Real** d_B_array, const int* lda, const int* ldda_B,
     Real alpha, int batchCount, cudaStream_t stream);
-
-template <typename Real>
-void batched_vector_add_fast(
-    Real** d_A_array, const int* ldda_A,
-    Real** d_B_array, const int* lda, const int* ldda_B,
-    Real alpha, int batchCount, int max_lda, cudaStream_t stream);
 
 #endif // GPU_COVARIANCE_H

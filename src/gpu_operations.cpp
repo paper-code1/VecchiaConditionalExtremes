@@ -1,5 +1,4 @@
 #include <iostream>
-#include <string>
 #include <mpi.h>
 #include <magma_v2.h>
 #include <sys/cdefs.h>
@@ -419,23 +418,6 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     cudaStream_t stream=opts.stream;
     magma_queue_t queue = opts.queue;
     
-    struct TimingRecord { const char* label; float ms; };
-    std::vector<TimingRecord> gpuTimings;
-    auto timeGpu = [&](const char* label, auto&& fn){
-        cudaEvent_t evStart, evStop;
-        checkCudaError(cudaEventCreate(&evStart));
-        checkCudaError(cudaEventCreate(&evStop));
-        checkCudaError(cudaEventRecord(evStart, stream));
-        fn();
-        checkCudaError(cudaEventRecord(evStop, stream));
-        checkCudaError(cudaEventSynchronize(evStop));
-        float ms = 0.0f;
-        checkCudaError(cudaEventElapsedTime(&ms, evStart, evStop));
-        gpuTimings.push_back({label, ms});
-        checkCudaError(cudaEventDestroy(evStart));
-        checkCudaError(cudaEventDestroy(evStop));
-    };
-    
     size_t batchCount = gpuData.ldda_locs.size() - 1;
     magma_int_t *dinfo_magma = gpuData.dinfo_magma;
     int *d_ldda_locs = gpuData.d_ldda_locs;
@@ -453,141 +435,101 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
 
 
     // copy the data from the device to the device
-    timeGpu("copy_obs_neighbors_d2d", [&]{
-        checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_device,
-                                   gpuData.d_observations_neighbors_device,
-                                   gpuData.total_observations_neighbors_size,
+    checkCudaError(cudaMemcpy(gpuData.d_observations_neighbors_copy_device, 
+                                   gpuData.d_observations_neighbors_device, 
+                                   gpuData.total_observations_neighbors_size, 
                                    cudaMemcpyDeviceToDevice));
-    });
-    timeGpu("copy_obs_points_d2d", [&]{
-        checkCudaError(cudaMemcpy(gpuData.d_observations_copy_device,
-                                   gpuData.d_observations_device,
-                                   gpuData.total_observations_points_size,
+    checkCudaError(cudaMemcpy(gpuData.d_observations_copy_device, 
+                                   gpuData.d_observations_device, 
+                                   gpuData.total_observations_points_size, 
                                    cudaMemcpyDeviceToDevice));
-    });
-    timeGpu("copy_range_h2d", [&]{
+    {
         std::vector<Real> range_host(opts.dim);
         for (int i=0;i<opts.dim;++i) range_host[i] = static_cast<Real>(theta[range_offset + i]);
         checkCudaError(cudaMemcpy(gpuData.d_range_device, range_host.data(), opts.dim * sizeof(Real), cudaMemcpyHostToDevice));
-    });
+    }
     checkCudaError(cudaStreamSynchronize(stream));
     
-    timeGpu("covariance_blocks", [&]{
-        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_array,
-                    gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                    gpuData.d_locs_array,
-                    gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                    gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
-                    batchCount,
-                    opts.dim, theta, gpuData.d_range_device, true,
-                    (int)max_n1, (int)max_n1,
-                    stream, opts);
-    });
-    timeGpu("cross_covariance", [&]{
-        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_neighbors_array,
-                    gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                    gpuData.d_locs_array,
-                    gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
-                    gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
-                    batchCount,
-                    opts.dim, theta, gpuData.d_range_device, false,
-                    (int)max_m, (int)max_n1,
-                    stream, opts);
-    });
-    timeGpu("conditioning_covariance", [&]{
-        compute_covariance_vbatched_fast<Real>(gpuData.d_locs_neighbors_array,
-                    gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                    gpuData.d_locs_neighbors_array,
-                    gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
-                    gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
-                    batchCount,
-                    opts.dim, theta, gpuData.d_range_device, true,
-                    (int)max_m, (int)max_m,
-                    stream, opts);
-    });
+    compute_covariance_vbatched<Real>(gpuData.d_locs_array,
+                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_locs_array,
+                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
+                batchCount,
+                opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
+                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_array,
+                gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
+                gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
+                batchCount,
+                opts.dim, theta, gpuData.d_range_device, false, stream, opts);
+    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_locs_neighbors_array, 
+                gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
+                gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
+                batchCount,
+                opts.dim, theta, gpuData.d_range_device, true, stream, opts);
     
     // cholesky factorization
-    timeGpu("chol_conditioning", [&]{
-        MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
-    });
+    MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
     // trsm
-    timeGpu("trsm_cross_cov", [&]{
-        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-                            max_m, max_n1,
-                            d_lda_locs_neighbors, d_lda_locs,
-                            (Real)1.0,
-                            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                            gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                            batchCount, queue);
-    });
-    timeGpu("trsm_mu", [&]{
-        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-                            max_m, max_n2,
-                            d_lda_locs_neighbors, d_const1,
-                            (Real)1.0,
-                            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                            gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                            batchCount, queue);
-    });
+    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                        max_m, max_n1,
+                        d_lda_locs_neighbors, d_lda_locs,
+                        (Real)1.0,
+                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+                        gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                        batchCount, queue);
+    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                        max_m, max_n2,
+                        d_lda_locs_neighbors, d_const1,
+                        (Real)1.0,
+                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+                        gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                        batchCount, queue);
     // gemm
-    timeGpu("gemm_cov_correction", [&]{
-        MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                                 d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
-                                 (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                 gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                 (Real)0.0, gpuData.d_cov_correction_array, d_ldda_cov,
-                                 batchCount,
-                                 max_n1, max_n1, max_m,
-                                 queue);
-    });
-    timeGpu("gemm_mu_correction", [&]{
-        MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                                 d_lda_locs, d_const1, d_lda_locs_neighbors,
-                                 (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                 gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                                 (Real)0.0, gpuData.d_mu_correction_array, d_ldda_locs,
-                                 batchCount,
-                                 max_n1, max_n2, max_m,
-                                 queue);
-    });
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
+                             d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
+                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             (Real)0.0, gpuData.d_cov_correction_array, d_ldda_cov,
+                             batchCount,
+                             max_n1, max_n1, max_m,
+                             queue);
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
+                             d_lda_locs, d_const1, d_lda_locs_neighbors,
+                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                             (Real)0.0, gpuData.d_mu_correction_array, d_ldda_locs,
+                             batchCount,
+                             max_n1, max_n2, max_m,
+                             queue);
 
     // 2.2 compute the conditional mean and variance using batched kernels
-    timeGpu("matrix_add_covariance_update", [&]{
-        batched_matrix_add_fast<Real>(
-            gpuData.d_cov_array, gpuData.d_ldda_cov,
-            gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-            -1.0, batchCount, (int)max_n1, stream);
-    });
-    timeGpu("vector_add_mu_update", [&]{
-        batched_vector_add_fast<Real>(
-            gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
-            gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-            -1.0, batchCount, (int)max_n1, stream);
-    }); 
+    batched_matrix_add<Real>(
+        gpuData.d_cov_array, gpuData.d_ldda_cov,
+        gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
+        -1.0, batchCount, stream);
+    batched_vector_add<Real>(
+        gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
+        gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
+        -1.0, batchCount, stream); 
     checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
-    timeGpu("chol_blocks", [&]{
-        MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
-    });
-    timeGpu("trsm_solve_mu", [&]{
-        MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-            d_lda_locs, d_const1, (Real)1.0,
-            gpuData.d_cov_array, d_ldda_cov,
-            gpuData.d_observations_copy_array, d_ldda_locs,
-            batchCount, queue);
-    });
+    MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
+    MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+        d_lda_locs, d_const1, (Real)1.0,
+        gpuData.d_cov_array, d_ldda_cov,
+        gpuData.d_observations_copy_array, d_ldda_locs,
+        batchCount, queue);
 
     // norm for all blocks
-    double norm2_item = 0.0;
-    timeGpu("norm2_batch", [&]{
-        norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
-    });
+    double norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
     // determinant for all blocks
-    double log_det_item = 0.0;
-    timeGpu("log_det_batch", [&]{
-        log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
-    });
+    double log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
     // sum for log-likelihood
     double log_likelihood = -0.5 *(
         log_det_item + norm2_item // the constant term is removed for simplicity
@@ -595,16 +537,6 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     double log_likelihood_all = 0;
     // mpi sum for log-likelihood
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    
-    if (rank == 0) {
-        std::cout << "[GPU_TIMER] scope=vecchia_likelihood unit=ms" << std::endl;
-        double total_ms = 0.0;
-        for (size_t i = 0; i < gpuTimings.size(); ++i) {
-            std::cout << "[GPU_TIMER] op=" << gpuTimings[i].label << " ms=" << gpuTimings[i].ms << std::endl;
-            total_ms += gpuTimings[i].ms;
-        }
-        std::cout << "[GPU_TIMER] op=total ms=" << total_ms << std::endl;
-    }
     
     return log_likelihood_all;
 }
