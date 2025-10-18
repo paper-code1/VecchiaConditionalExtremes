@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <mpi.h>
 #include <magma_v2.h>
 #include <sys/cdefs.h>
@@ -120,8 +121,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     gpuData.h_conditioning_cov_array = new Real *[blockInfos.size()];
     gpuData.h_observations_neighbors_copy_array = new Real *[blockInfos.size()];
     gpuData.h_observations_copy_array = new Real *[blockInfos.size()];
-    gpuData.h_mu_correction_array = new Real *[blockInfos.size()];
-    gpuData.h_cov_correction_array = new Real *[blockInfos.size()];
+    
 
     // array of pointers for the device
     checkCudaError(cudaMalloc(&gpuData.d_locs_array, blockInfos.size() * opts.dim * sizeof(Real *)));
@@ -133,8 +133,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     checkCudaError(cudaMalloc(&gpuData.d_conditioning_cov_array, blockInfos.size() * sizeof(Real *)));
     checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_array, blockInfos.size() * sizeof(Real *)));
     checkCudaError(cudaMalloc(&gpuData.d_observations_copy_array, blockInfos.size() * sizeof(Real *)));
-    checkCudaError(cudaMalloc(&gpuData.d_mu_correction_array, blockInfos.size() * sizeof(Real *)));
-    checkCudaError(cudaMalloc(&gpuData.d_cov_correction_array, blockInfos.size() * sizeof(Real *)));
+    
     checkCudaError(cudaMalloc(&gpuData.d_range_device, opts.dim * sizeof(Real)));
 
     // Calculate the total memory needed for blocks and nearest neighbors
@@ -191,8 +190,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     checkCudaError(cudaMalloc(&gpuData.d_cross_cov_device, total_cross_cov_size));
     checkCudaError(cudaMalloc(&gpuData.d_observations_neighbors_copy_device, total_observations_nearestNeighbors_size));
     checkCudaError(cudaMalloc(&gpuData.d_observations_copy_device, total_observations_points_size));
-    checkCudaError(cudaMalloc(&gpuData.d_mu_correction_device, total_observations_points_size));
-    checkCudaError(cudaMalloc(&gpuData.d_cov_correction_device, total_cov_size));
+    
 
     // set device memory to zero
     checkCudaError(cudaMemset(gpuData.d_locs_device, 0, total_locs_size_device));
@@ -204,8 +202,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     checkCudaError(cudaMemset(gpuData.d_cross_cov_device, 0, total_cross_cov_size));
     checkCudaError(cudaMemset(gpuData.d_observations_neighbors_copy_device, 0, total_observations_nearestNeighbors_size));
     checkCudaError(cudaMemset(gpuData.d_observations_copy_device, 0, total_observations_points_size));
-    checkCudaError(cudaMemset(gpuData.d_mu_correction_device, 0, total_observations_points_size));
-    checkCudaError(cudaMemset(gpuData.d_cov_correction_device, 0, total_cov_size)); 
+    
     
     // Prepare to store blocks data for coalesced memory access
     Real *locs_blocks_data = new Real[total_locs_size_host/sizeof(Real)];
@@ -250,8 +247,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
     Real *cross_cov_ptr = gpuData.d_cross_cov_device;
     Real *observations_neighbors_copy_ptr = gpuData.d_observations_neighbors_copy_device;
     Real *observations_copy_ptr = gpuData.d_observations_copy_device;
-    Real *mu_correction_ptr = gpuData.d_mu_correction_device;
-    Real *cov_correction_ptr = gpuData.d_cov_correction_device;
+    
 
     // calculate size, and GPU pointers array
     size_t index_locs = 0;
@@ -275,8 +271,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
         gpuData.h_cross_cov_array[i] = cross_cov_ptr;
         gpuData.h_observations_neighbors_copy_array[i] = observations_neighbors_copy_ptr;
         gpuData.h_observations_copy_array[i] = observations_copy_ptr;
-        gpuData.h_mu_correction_array[i] = mu_correction_ptr;
-        gpuData.h_cov_correction_array[i] = cov_correction_ptr;
+        
         // (observations)
         // cast observations to Real
         {
@@ -315,8 +310,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
         // copy update
         observations_neighbors_copy_ptr += gpuData.ldda_neighbors[i];
         observations_copy_ptr += gpuData.ldda_locs[i];
-        mu_correction_ptr += gpuData.ldda_locs[i];
-        cov_correction_ptr += gpuData.ldda_cov[i] * m_blocks;
+        
     }
 
     // copy data array to the GPU
@@ -356,14 +350,7 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
                gpuData.h_observations_copy_array, 
                blockInfos.size() * sizeof(Real *), 
                cudaMemcpyHostToDevice));
-    checkCudaError(cudaMemcpy(gpuData.d_mu_correction_array, 
-               gpuData.h_mu_correction_array,  
-               blockInfos.size() * sizeof(Real *), 
-               cudaMemcpyHostToDevice));
-    checkCudaError(cudaMemcpy(gpuData.d_cov_correction_array, 
-               gpuData.h_cov_correction_array,  
-               blockInfos.size() * sizeof(Real *), 
-               cudaMemcpyHostToDevice));
+    
 
     // copy data from host to device
     size_t batchCount = gpuData.ldda_locs.size() - 1;
@@ -444,92 +431,167 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
                                    gpuData.total_observations_points_size, 
                                    cudaMemcpyDeviceToDevice));
     {
-        std::vector<Real> range_host(opts.dim);
-        for (int i=0;i<opts.dim;++i) range_host[i] = static_cast<Real>(theta[range_offset + i]);
-        checkCudaError(cudaMemcpy(gpuData.d_range_device, range_host.data(), opts.dim * sizeof(Real), cudaMemcpyHostToDevice));
+        std::vector<Real> inv_range2_host(opts.dim);
+        for (int i=0;i<opts.dim;++i) {
+            Real r = static_cast<Real>(theta[range_offset + i]);
+            inv_range2_host[i] = (Real)1.0 / (r * r);
+        }
+        checkCudaError(cudaMemcpy(gpuData.d_range_device, inv_range2_host.data(), opts.dim * sizeof(Real), cudaMemcpyHostToDevice));
     }
     checkCudaError(cudaStreamSynchronize(stream));
     
-    compute_covariance_vbatched<Real>(gpuData.d_locs_array,
+    // CUDA event setup for timing
+    cudaEvent_t evStart, evStop;
+    checkCudaError(cudaEventCreate(&evStart));
+    checkCudaError(cudaEventCreate(&evStop));
+    auto time_region = [&](auto fn)->double{
+        checkCudaError(cudaEventRecord(evStart, stream));
+        fn();
+        checkCudaError(cudaEventRecord(evStop, stream));
+        checkCudaError(cudaEventSynchronize(evStop));
+        float ms = 0.0f;
+        checkCudaError(cudaEventElapsedTime(&ms, evStart, evStop));
+        return static_cast<double>(ms) / 1000.0; // seconds
+    };
+
+    double t_matgen_cov_blocks = 0.0;
+    double t_matgen_cross_blocks = 0.0;
+    double t_matgen_conditioning_blocks = 0.0;
+    double t_potrf_neighbors = 0.0;
+    double t_trsm_neighbors_cross = 0.0;
+    double t_trsm_neighbors_obs = 0.0;
+    double t_gemm_crosst_cross = 0.0;
+    double t_gemm_crosst_y = 0.0;
+    double t_potrf_final = 0.0;
+    double t_trsm_final = 0.0;
+    double t_norm2_batch = 0.0;
+    double t_log_det_batch = 0.0;
+
+    // 1) MatGen cov blocks
+    double local_t_matgen_cov_blocks = time_region([&](){
+        compute_covariance_vbatched<Real>(gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cov_array, gpuData.d_ldda_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
-    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
+    });
+    MPI_Allreduce(&local_t_matgen_cov_blocks, &t_matgen_cov_blocks, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    // 2) MatGen cross blocks
+    double local_t_matgen_cross_blocks = time_region([&](){
+        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_array,
                 gpuData.d_lda_locs, 1, gpuData.total_locs_num_device,
                 gpuData.d_cross_cov_array, gpuData.d_ldda_cross_cov, gpuData.d_lda_locs,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, false, stream, opts);
-    compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
+    });
+    MPI_Allreduce(&local_t_matgen_cross_blocks, &t_matgen_cross_blocks, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    // 3) MatGen conditioning blocks
+    double local_t_matgen_conditioning_blocks = time_region([&](){
+        compute_covariance_vbatched<Real>(gpuData.d_locs_neighbors_array,
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_locs_neighbors_array, 
                 gpuData.d_lda_locs_neighbors, 1, gpuData.total_locs_neighbors_num_device,
                 gpuData.d_conditioning_cov_array, gpuData.d_ldda_conditioning_cov, gpuData.d_lda_locs_neighbors,
                 batchCount,
                 opts.dim, theta, gpuData.d_range_device, true, stream, opts);
+    });
+    MPI_Allreduce(&local_t_matgen_conditioning_blocks, &t_matgen_conditioning_blocks, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     
-    // cholesky factorization
-    MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
-    // trsm
-    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-                        max_m, max_n1,
-                        d_lda_locs_neighbors, d_lda_locs,
-                        (Real)1.0,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                        batchCount, queue);
-    MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-                        max_m, max_n2,
-                        d_lda_locs_neighbors, d_const1,
-                        (Real)1.0,
-                        gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
-                        gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                        batchCount, queue);
-    // gemm
-    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                             d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
-                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             (Real)0.0, gpuData.d_cov_correction_array, d_ldda_cov,
-                             batchCount,
-                             max_n1, max_n1, max_m,
-                             queue);
-    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
-                             d_lda_locs, d_const1, d_lda_locs_neighbors,
-                             (Real)1.0, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                             (Real)0.0, gpuData.d_mu_correction_array, d_ldda_locs,
-                             batchCount,
-                             max_n1, max_n2, max_m,
-                             queue);
+    // cholesky factorization (neighbors)
+    double local_t_potrf_neighbors = time_region([&](){
+        MagmaOps<Real>::potrf_neighbors(MagmaLower, d_lda_locs_neighbors, gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov, dinfo_magma, batchCount, max_m, queue);
+    });
+    MPI_Allreduce(&local_t_potrf_neighbors, &t_potrf_neighbors, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
-    // 2.2 compute the conditional mean and variance using batched kernels
-    batched_matrix_add<Real>(
-        gpuData.d_cov_array, gpuData.d_ldda_cov,
-        gpuData.d_cov_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-        -1.0, batchCount, stream);
-    batched_vector_add<Real>(
-        gpuData.d_observations_copy_array, gpuData.d_ldda_locs,
-        gpuData.d_mu_correction_array, gpuData.d_lda_locs, gpuData.d_ldda_locs,
-        -1.0, batchCount, stream); 
+    // TRSM neighbors->cross
+    double local_t_trsm_neighbors_cross = time_region([&](){
+        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                            max_m, max_n1,
+                            d_lda_locs_neighbors, d_lda_locs,
+                            (Real)1.0,
+                            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+                            gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                            batchCount, queue);
+    });
+    MPI_Allreduce(&local_t_trsm_neighbors_cross, &t_trsm_neighbors_cross, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    // TRSM neighbors->obs
+    double local_t_trsm_neighbors_obs = time_region([&](){
+        MagmaOps<Real>::trsm_max(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+                            max_m, max_n2,
+                            d_lda_locs_neighbors, d_const1,
+                            (Real)1.0,
+                            gpuData.d_conditioning_cov_array, d_ldda_conditioning_cov,
+                            gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                            batchCount, queue);
+    });
+    MPI_Allreduce(&local_t_trsm_neighbors_obs, &t_trsm_neighbors_obs, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    // GEMM cross^T*cross (fused: cov = cov - cross^T*cross)
+    double local_t_gemm_crosst_cross = time_region([&](){
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
+                                 d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
+                                 (Real)(-1.0), gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                                 gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                                 (Real)1.0, gpuData.d_cov_array, d_ldda_cov,
+                                 batchCount,
+                                 max_n1, max_n1, max_m,
+                                 queue);
+    });
+    MPI_Allreduce(&local_t_gemm_crosst_cross, &t_gemm_crosst_cross, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    // GEMM cross^T*y_nn (fused: y = y - cross^T*y_nn)
+    double local_t_gemm_crosst_y = time_region([&](){
+    MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
+                                 d_lda_locs, d_const1, d_lda_locs_neighbors,
+                                 (Real)(-1.0), gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                                 gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                                 (Real)1.0, gpuData.d_observations_copy_array, d_ldda_locs,
+                                 batchCount,
+                                 max_n1, max_n2, max_m,
+                                 queue);
+    });
+    MPI_Allreduce(&local_t_gemm_crosst_y, &t_gemm_crosst_y, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    // 2.2 fused into GEMMs above (no separate AXPY kernels)
     checkCudaError(cudaStreamSynchronize(stream));
 
     // 2.3 compute the log-likelihood
-    MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
-    MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
-        d_lda_locs, d_const1, (Real)1.0,
-        gpuData.d_cov_array, d_ldda_cov,
-        gpuData.d_observations_copy_array, d_ldda_locs,
-        batchCount, queue);
+    double local_t_potrf_final = time_region([&](){
+        MagmaOps<Real>::potrf_final(MagmaLower, d_lda_locs, gpuData.d_cov_array, d_ldda_cov, dinfo_magma, batchCount, queue);
+    });
+    MPI_Allreduce(&local_t_potrf_final, &t_potrf_final, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    double local_t_trsm_final = time_region([&](){
+        MagmaOps<Real>::trsm_final(MagmaLeft, MagmaLower, MagmaNoTrans, MagmaNonUnit,
+            d_lda_locs, d_const1, (Real)1.0,
+            gpuData.d_cov_array, d_ldda_cov,
+            gpuData.d_observations_copy_array, d_ldda_locs,
+            batchCount, queue);
+    });
+    MPI_Allreduce(&local_t_trsm_final, &t_trsm_final, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // norm for all blocks
-    double norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
+    double norm2_item = 0.0;
+    {
+        double local_t = time_region([&](){
+            norm2_item = (double)norm2_batch<Real>(d_lda_locs, gpuData.d_observations_copy_array, d_ldda_locs, batchCount, stream);
+        });
+        MPI_Allreduce(&local_t, &t_norm2_batch, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    }
     // determinant for all blocks
-    double log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
+    double log_det_item = 0.0;
+    {
+        double local_t = time_region([&](){
+            log_det_item = (double)log_det_batch<Real>(d_lda_locs, gpuData.d_cov_array, d_ldda_cov, batchCount, stream);
+        });
+        MPI_Allreduce(&local_t, &t_log_det_batch, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    }
     // sum for log-likelihood
     double log_likelihood = -0.5 *(
         log_det_item + norm2_item // the constant term is removed for simplicity
@@ -538,6 +600,32 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     // mpi sum for log-likelihood
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
+    // Print per-operation timings if requested (rank 0)
+    if (opts.print_all_gpu_operations && rank == 0) {
+        std::cout << std::fixed << std::setprecision(6);
+        std::cout << "[GPU] MatGen cov blocks (ms): " << t_matgen_cov_blocks * 1000.0 << std::endl;
+        std::cout << "[GPU] MatGen cross blocks (ms): " << t_matgen_cross_blocks * 1000.0 << std::endl;
+        std::cout << "[GPU] MatGen conditioning blocks (ms): " << t_matgen_conditioning_blocks * 1000.0 << std::endl;
+        std::cout << "[GPU] POTRF(neighbors) (ms): " << t_potrf_neighbors * 1000.0 << std::endl;
+        std::cout << "[GPU] TRSM(neighbors->cross) (ms): " << t_trsm_neighbors_cross * 1000.0 << std::endl;
+        std::cout << "[GPU] TRSM(neighbors->obs) (ms): " << t_trsm_neighbors_obs * 1000.0 << std::endl;
+        std::cout << "[GPU] GEMM(cross^T*cross) (ms): " << t_gemm_crosst_cross * 1000.0 << std::endl;
+        std::cout << "[GPU] GEMM(cross^T*y_nn) (ms): " << t_gemm_crosst_y * 1000.0 << std::endl;
+        std::cout << "[GPU] POTRF(final) (ms): " << t_potrf_final * 1000.0 << std::endl;
+        std::cout << "[GPU] TRSM(final solve) (ms): " << t_trsm_final * 1000.0 << std::endl;
+        std::cout << "[GPU] norm2_batch (ms): " << t_norm2_batch * 1000.0 << std::endl;
+        std::cout << "[GPU] log_det_batch (ms): " << t_log_det_batch * 1000.0 << std::endl;
+        double t_total_sec =
+            t_matgen_cov_blocks + t_matgen_cross_blocks + t_matgen_conditioning_blocks +
+            t_potrf_neighbors + t_trsm_neighbors_cross + t_trsm_neighbors_obs +
+            t_gemm_crosst_cross + t_gemm_crosst_y +
+            t_potrf_final + t_trsm_final + t_norm2_batch + t_log_det_batch;
+        std::cout << "[GPU] Total (ms): " << t_total_sec * 1000.0 << std::endl;
+    }
+
+    checkCudaError(cudaEventDestroy(evStart));
+    checkCudaError(cudaEventDestroy(evStop));
+
     return log_likelihood_all;
 }
 
@@ -552,8 +640,7 @@ void cleanupGpuMemory(GpuDataT<Real> &gpuData)
     cudaFree(gpuData.d_observations_neighbors_device);
     cudaFree(gpuData.d_observations_neighbors_copy_device);
     cudaFree(gpuData.d_observations_copy_device);
-    cudaFree(gpuData.d_mu_correction_device);
-    cudaFree(gpuData.d_cov_correction_device);
+    
 
     delete[] gpuData.h_cov_array;
     delete[] gpuData.h_conditioning_cov_array;
@@ -563,8 +650,7 @@ void cleanupGpuMemory(GpuDataT<Real> &gpuData)
     delete[] gpuData.h_observations_array;
     delete[] gpuData.h_observations_neighbors_array;
     delete[] gpuData.h_observations_copy_array;
-    delete[] gpuData.h_mu_correction_array;
-    delete[] gpuData.h_cov_correction_array;
+    
     delete[] gpuData.h_observations_neighbors_copy_array;
 }
 

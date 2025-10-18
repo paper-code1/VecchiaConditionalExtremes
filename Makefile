@@ -21,7 +21,7 @@ endif
 #NVCC=$(_CUDA_ROOT_)/bin/nvcc
 NVCC=nvcc
 
-NVOPTS = -ccbin $(CXX) --compiler-options -uns --extended-lambda -allow-unsupported-compiler
+NVOPTS = -ccbin $(CXX) --compiler-options -uns --extended-lambda -allow-unsupported-compiler -std=c++17
 CXXFLAGS = -O2 -Wall -std=c++17 -fopenmp -Wsign-compare -Wno-sign-compare -Wunknown-pragmas -Wunused-variable
 
 ifeq ($(SYSTEM),CRAY)

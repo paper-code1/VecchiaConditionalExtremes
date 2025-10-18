@@ -10,6 +10,7 @@
 #include <mpi.h>
 #define BATCHCOUNT_MAX 65536
 #define THREADS_PER_BLOCK 64
+#define MAXDIM 32
 
 #define THREAD_X (16)
 #define THREAD_Y (16)
@@ -25,6 +26,7 @@ __global__ void RBF_matcov_kernel(const Real* X1, int ldx1, int incx1, int strid
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        if (X1 == X2 && j > i) return;
         Real dist_sqaure = 0;
         for (int k = 0; k < dim; k++) {
             Real x1 = X1[i * incx1 + k * stridex1];
@@ -42,20 +44,23 @@ __global__ void RBF_matcov_kernel(const Real* X1, int ldx1, int incx1, int strid
 
 // (coalesced memory access)
 template <typename Real>
-__global__ void PowerExp_matcov_scaled_kernel(const Real* X1, int ldx1, int incx1, int stridex1,
+__global__ void PowerExp_matcov_scaled_kernel(const Real* __restrict__ X1, int ldx1, int incx1, int stridex1,
                                           const Real* X2, int ldx2, int incx2, int stridex2,
                                           Real* C, int ldc, int n, int dim, 
                                           Real sigma2, Real smoothness, Real nugget, 
-                                          const Real* range, bool nugget_tag) {
+                                          const Real* __restrict__ range, bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        if (X1 == X2 && j > i) return;
         Real dist_sqaure = 0;
+        #pragma unroll 4
         for (int k = 0; k < dim; k++) {
             Real x1 = X1[i * incx1 + k * stridex1];
             Real x2 = X2[j * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real power_distance = pow(scaled_distance, smoothness);
@@ -68,20 +73,23 @@ __global__ void PowerExp_matcov_scaled_kernel(const Real* X1, int ldx1, int incx
 }
 
 template <typename Real>
-__global__ void Matern12_scaled_matcov_kernel(const Real* X1, int ldx1, int incx1, int stridex1,
-                                          const Real* X2, int ldx2, int incx2, int stridex2,
-                                          Real* C, int ldc, int n, int dim, 
+__global__ void Matern12_scaled_matcov_kernel(const Real* __restrict__ X1, int ldx1, int incx1, int stridex1,
+                                          const Real* __restrict__ X2, int ldx2, int incx2, int stridex2,
+                                          Real* __restrict__ C, int ldc, int n, int dim, 
                                           Real sigma2, Real nugget, 
-                                          const Real* range, bool nugget_tag) {
+                                          const Real* __restrict__ range, bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        if (X1 == X2 && j > i) return;
         Real dist_sqaure = 0;
+        #pragma unroll 4
         for (int k = 0; k < dim; k++) {
             Real x1 = X1[i * incx1 + k * stridex1];
             Real x2 = X2[j * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -99,20 +107,23 @@ __global__ void Matern12_scaled_matcov_kernel(const Real* X1, int ldx1, int incx
 }
 
 template <typename Real>
-__global__ void Matern32_scaled_matcov_kernel(const Real* X1, int ldx1, int incx1, int stridex1,
-                                          const Real* X2, int ldx2, int incx2, int stridex2,
-                                          Real* C, int ldc, int n, int dim, 
+__global__ void Matern32_scaled_matcov_kernel(const Real* __restrict__ X1, int ldx1, int incx1, int stridex1,
+                                          const Real* __restrict__ X2, int ldx2, int incx2, int stridex2,
+                                          Real* __restrict__ C, int ldc, int n, int dim, 
                                           Real sigma2, Real nugget, 
-                                          const Real* range, bool nugget_tag) {
+                                          const Real* __restrict__ range, bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < ldx1 && j < ldx2 && i >= 0 && j >= 0) {
+        if (X1 == X2 && j > i) return;
         Real dist_sqaure = 0;
+        #pragma unroll 4
         for (int k = 0; k < dim; k++) {
             Real x1 = X1[i * incx1 + k * stridex1];
             Real x2 = X2[j * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -130,11 +141,11 @@ __global__ void Matern32_scaled_matcov_kernel(const Real* X1, int ldx1, int incx
 }
 
 template <typename Real>
-__global__ void Matern52_scaled_matcov_kernel(const Real* X1, int ldx1, int incx1, int stridex1,
-                                          const Real* X2, int ldx2, int incx2, int stridex2,
-                                          Real* C, int ldc, int n, int dim, 
+__global__ void Matern52_scaled_matcov_kernel(const Real* __restrict__ X1, int ldx1, int incx1, int stridex1,
+                                          const Real* __restrict__ X2, int ldx2, int incx2, int stridex2,
+                                          Real* __restrict__ C, int ldc, int n, int dim, 
                                           Real sigma2, Real nugget, 
-                                          const Real* range, bool nugget_tag) {
+                                          const Real* __restrict__ range, bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -143,7 +154,8 @@ __global__ void Matern52_scaled_matcov_kernel(const Real* X1, int ldx1, int incx
         for (int k = 0; k < dim; k++) {
             Real x1 = X1[i * incx1 + k * stridex1];
             Real x2 = X2[j * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -160,11 +172,11 @@ __global__ void Matern52_scaled_matcov_kernel(const Real* X1, int ldx1, int incx
 
 template <typename Real>
 __global__ void Matern72_scaled_matcov_kernel(
-    const Real* X1, int ldx1, int incx1, int stridex1,
-    const Real* X2, int ldx2, int incx2, int stridex2,
-    Real* C, int ldc, int n, int dim, 
+    const Real* __restrict__ X1, int ldx1, int incx1, int stridex1,
+    const Real* __restrict__ X2, int ldx2, int incx2, int stridex2,
+    Real* __restrict__ C, int ldc, int n, int dim, 
     Real sigma2, Real nugget, 
-    const Real* range, bool nugget_tag) {
+    const Real* __restrict__ range, bool nugget_tag) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -173,7 +185,8 @@ __global__ void Matern72_scaled_matcov_kernel(
         for (int k = 0; k < dim; k++) {
             Real x1 = X1[i * incx1 + k * stridex1];
             Real x2 = X2[j * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -192,18 +205,20 @@ __global__ void Matern72_scaled_matcov_kernel(
 // core kernel for batched matrix generation 
 template <typename Real>
 __device__ void Matern72_scaled_matcov_vbatched_kernel_device(
-    const Real* d_X1, int ldx1, int incx1, int stridex1,
-    const Real* d_X2, int ldx2, int incx2, int stridex2,
-    Real* d_C, int ldc, int n, int dim, 
-    Real sigma2, const Real* range, 
+    const Real* __restrict__ d_X1, int ldx1, int incx1, int stridex1,
+    const Real* __restrict__ d_X2, int ldx2, int incx2, int stridex2,
+    Real* __restrict__ d_C, int ldc, int n, int dim, 
+    Real sigma2, const Real* __restrict__ range, 
     Real nugget, bool nugget_tag,
     int gtx, int gty) {
     if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        if (d_X1 == d_X2 && gty > gtx) return;
         Real dist_sqaure = 0;
         for (int k = 0; k < dim; k++) {
             Real x1 = d_X1[gtx * incx1 + k * stridex1];
             Real x2 = d_X2[gty * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -222,18 +237,20 @@ __device__ void Matern72_scaled_matcov_vbatched_kernel_device(
 // core kernel for batched matrix generation 
 template <typename Real>
 __device__ void Matern52_scaled_matcov_vbatched_kernel_device(
-    const Real* d_X1, int ldx1, int incx1, int stridex1,
-    const Real* d_X2, int ldx2, int incx2, int stridex2,
-    Real* d_C, int ldc, int n, int dim, 
-    Real sigma2, const Real* range, 
+    const Real* __restrict__ d_X1, int ldx1, int incx1, int stridex1,
+    const Real* __restrict__ d_X2, int ldx2, int incx2, int stridex2,
+    Real* __restrict__ d_C, int ldc, int n, int dim, 
+    Real sigma2, const Real* __restrict__ range, 
     Real nugget, bool nugget_tag,
     int gtx, int gty) {
     if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        if (d_X1 == d_X2 && gty > gtx) return;
         Real dist_sqaure = 0;
         for (int k = 0; k < dim; k++) {
             Real x1 = d_X1[gtx * incx1 + k * stridex1];
             Real x2 = d_X2[gty * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -251,18 +268,20 @@ __device__ void Matern52_scaled_matcov_vbatched_kernel_device(
 // core kernel for batched matrix generation 
 template <typename Real>
 __device__ void Matern32_scaled_matcov_vbatched_kernel_device(
-    const Real* d_X1, int ldx1, int incx1, int stridex1,
-    const Real* d_X2, int ldx2, int incx2, int stridex2,
-    Real* d_C, int ldc, int n, int dim, 
-    Real sigma2, const Real* range, 
+    const Real* __restrict__ d_X1, int ldx1, int incx1, int stridex1,
+    const Real* __restrict__ d_X2, int ldx2, int incx2, int stridex2,
+    Real* __restrict__ d_C, int ldc, int n, int dim, 
+    Real sigma2, const Real* __restrict__ range, 
     Real nugget, bool nugget_tag,
     int gtx, int gty) {
     if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        if (d_X1 == d_X2 && gty > gtx) return;
         Real dist_sqaure = 0;
         for (int k = 0; k < dim; k++) {
             Real x1 = d_X1[gtx * incx1 + k * stridex1];
             Real x2 = d_X2[gty * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * range[k];
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -280,18 +299,21 @@ __device__ void Matern32_scaled_matcov_vbatched_kernel_device(
 // core kernel for batched matrix generation 
 template <typename Real>
 __device__ void Matern12_scaled_matcov_vbatched_kernel_device(
-    const Real* d_X1, int ldx1, int incx1, int stridex1,
-    const Real* d_X2, int ldx2, int incx2, int stridex2,
-    Real* d_C, int ldc, int n, int dim, 
-    Real sigma2, const Real* range, 
+    const Real* __restrict__ d_X1, int ldx1, int incx1, int stridex1,
+    const Real* __restrict__ d_X2, int ldx2, int incx2, int stridex2,
+    Real* __restrict__ d_C, int ldc, int n, int dim, 
+    Real sigma2, const Real* __restrict__ range, 
     Real nugget, bool nugget_tag,
     int gtx, int gty) {
     if (gtx < ldx1 && gty < ldx2 && gtx >= 0 && gty >= 0) {
+        if (d_X1 == d_X2 && gty > gtx) return;
         Real dist_sqaure = 0;
         for (int k = 0; k < dim; k++) {
             Real x1 = d_X1[gtx * incx1 + k * stridex1];
             Real x2 = d_X2[gty * incx2 + k * stridex2];
-            dist_sqaure += (x1 - x2) * (x1 - x2) / range[k] / range[k];
+            Real inv_r2 = range[k];
+            Real diff = x1 - x2;
+            dist_sqaure += diff * diff * inv_r2;
         }
         Real scaled_distance = sqrt(dist_sqaure);
         Real a0 = 1.0;
@@ -316,8 +338,14 @@ __global__ void Matern72_scaled_matcov_vbatched_kernel(
     const int batchid = blockIdx.z;
     const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
     const int gty = blockIdx.y * blockDim.y + threadIdx.y;
-
-    Matern72_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range, nugget, nugget_tag, gtx, gty);
+    __shared__ Real s_range[MAXDIM];
+    if (dim <= MAXDIM) {
+        if (threadIdx.x < dim) {
+            s_range[threadIdx.x] = range[threadIdx.x];
+        }
+        __syncthreads();
+    }
+    Matern72_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, s_range, nugget, nugget_tag, gtx, gty);
 }
 
 // batched matrix generation 
@@ -331,8 +359,14 @@ __global__ void Matern52_scaled_matcov_vbatched_kernel(
     const int batchid = blockIdx.z;
     const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
     const int gty = blockIdx.y * blockDim.y + threadIdx.y;
-
-    Matern52_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range, nugget, nugget_tag, gtx, gty);
+    __shared__ Real s_range[MAXDIM];
+    if (dim <= MAXDIM) {
+        if (threadIdx.x < dim) {
+            s_range[threadIdx.x] = range[threadIdx.x];
+        }
+        __syncthreads();
+    }
+    Matern52_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, s_range, nugget, nugget_tag, gtx, gty);
 }
 
 // batched matrix generation 
@@ -346,8 +380,14 @@ __global__ void Matern32_scaled_matcov_vbatched_kernel(
     const int batchid = blockIdx.z;
     const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
     const int gty = blockIdx.y * blockDim.y + threadIdx.y;
-
-    Matern32_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range,   nugget, nugget_tag, gtx, gty);
+    __shared__ Real s_range[MAXDIM];
+    if (dim <= MAXDIM) {
+        if (threadIdx.x < dim) {
+            s_range[threadIdx.x] = range[threadIdx.x];
+        }
+        __syncthreads();
+    }
+    Matern32_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, s_range,   nugget, nugget_tag, gtx, gty);
 }
 
 // batched matrix generation 
@@ -361,8 +401,14 @@ __global__ void Matern12_scaled_matcov_vbatched_kernel(
     const int batchid = blockIdx.z;
     const int gtx = blockIdx.x * blockDim.x + threadIdx.x;
     const int gty = blockIdx.y * blockDim.y + threadIdx.y;
-
-    Matern12_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, range, nugget, nugget_tag, gtx, gty);
+    __shared__ Real s_range[MAXDIM];
+    if (dim <= MAXDIM) {
+        if (threadIdx.x < dim) {
+            s_range[threadIdx.x] = range[threadIdx.x];
+        }
+        __syncthreads();
+    }
+    Matern12_scaled_matcov_vbatched_kernel_device<Real>(d_X1[batchid], ldx1[batchid], incx1, stridex1, d_X2[batchid], ldx2[batchid], incx2, stridex2, d_C[batchid], ldc[batchid], n[batchid], dim, sigma2, s_range, nugget, nugget_tag, gtx, gty);
 }
 
 

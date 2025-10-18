@@ -25,8 +25,7 @@ struct GpuDataT
     Real **h_conditioning_cov_array;
     Real **h_observations_neighbors_copy_array;
     Real **h_observations_copy_array;
-    Real **h_mu_correction_array;
-    Real **h_cov_correction_array;
+    
     // leading dimensions for GPU points (varied)
     std::vector<int> ldda_locs;      // Leading dimensions for GPU points (varied)
     std::vector<int> ldda_neighbors;   // Leading dimension for GPU nearest neighbors (varied)
@@ -63,8 +62,7 @@ struct GpuDataT
     Real *d_conditioning_cov_device;           // Contiguous memory for conditioning covariance matrix
     Real *d_observations_neighbors_copy_device;
     Real *d_observations_copy_device;
-    Real *d_mu_correction_device;
-    Real *d_cov_correction_device;
+    
     Real *d_range_device;
     
     // pointers for matrix and vectors 
@@ -77,8 +75,7 @@ struct GpuDataT
     Real **d_conditioning_cov_array;
     Real **d_observations_neighbors_copy_array;
     Real **d_observations_copy_array; 
-    Real **d_mu_correction_array;
-    Real **d_cov_correction_array;
+    
 };
 
 using GpuData = GpuDataT<double>;

@@ -116,46 +116,26 @@ std::tuple<double, double, double> performPredictionOnGPU(const GpuDataT<Real> &
                         gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
                         batchCount, queue);
     // gemm
+    // Fused updates: cov = cov - cross^T*cross; y = y - cross^T*y_nn
     MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_lda_locs, d_lda_locs_neighbors,
-                             (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                             (Real)0, gpuData.d_cov_correction_array, d_ldda_cov,
+                             (Real)(-1.0), gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             (Real)1.0, gpuData.d_cov_array, d_ldda_cov,
                              batchCount, 
                              max_n1, max_n1, max_m, 
                              queue);
     MagmaOps<Real>::gemm_max(MagmaTrans, MagmaNoTrans,
                              d_lda_locs, d_const1, d_lda_locs_neighbors,
-                             (Real)1, gpuData.d_cross_cov_array, d_ldda_cross_cov,
-                                gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
-                             (Real)0, gpuData.d_mu_correction_array, d_ldda_locs,
+                             (Real)(-1.0), gpuData.d_cross_cov_array, d_ldda_cross_cov,
+                             gpuData.d_observations_neighbors_copy_array, d_ldda_neighbors,
+                             (Real)1.0, gpuData.d_observations_copy_array, d_ldda_locs,
                              batchCount, 
                              max_n1, max_n2, max_m,
                              queue);
     checkCudaError(cudaStreamSynchronize(stream));
     // 2.2 compute the conditional mean and variance
-    for (size_t i = 0; i < batchCount; ++i){
-        // compute conditional variance
-        if constexpr (std::is_same<Real,double>::value) {
-            magmablas_dgeadd(gpuData.lda_locs[i], gpuData.lda_locs[i],
-                            -1.,
-                            (double*)gpuData.h_cov_correction_array[i], gpuData.ldda_locs[i], 
-                            (double*)gpuData.h_cov_array[i], gpuData.ldda_cov[i],
-                            queue);
-        } else {
-            magmablas_sgeadd(gpuData.lda_locs[i], gpuData.lda_locs[i],
-                            -1.f,
-                            (float*)gpuData.h_cov_correction_array[i], gpuData.ldda_locs[i], 
-                            (float*)gpuData.h_cov_array[i], gpuData.ldda_cov[i],
-                            queue);
-        }
-        // compute conditional mean
-        // copy h_mu_correction_array to h_observations_copy_array
-        checkCudaError(cudaMemcpy(gpuData.h_observations_copy_array[i], 
-                                  gpuData.h_mu_correction_array[i], 
-                                  gpuData.lda_locs[i] * sizeof(Real), 
-                                  cudaMemcpyDeviceToHost));
-    }
+    // Fused already; no separate corrections needed
     checkCudaError(cudaStreamSynchronize(stream));
 
     // New code starts here

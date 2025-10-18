@@ -44,6 +44,7 @@ struct Opts
     int m; // the number of nearest neighbor
     int m_test; // the number of nearest neighbor for testing
     bool print;
+    bool print_all_gpu_operations;
     int gpu_id;
     int seed;
     int dim;

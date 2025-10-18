@@ -23,6 +23,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("num_total_points", "Total number of points", cxxopts::value<long long>()->default_value("20000"))
     ("num_total_blocks", "Total number of blocks", cxxopts::value<long long >()->default_value("1000"))
     ("print", "Print additional information", cxxopts::value<bool>()->default_value("true")->implicit_value("true"))
+    ("print_all_gpu_operations", "Print detailed GPU operation timings", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
     ("m", "Special rule for the first 100 blocks", cxxopts::value<int>()->default_value("200"))
     ("num_total_points_test", "Total number of points for testing", cxxopts::value<long long>()->default_value("2000"))
     ("num_total_blocks_test", "Total number of blocks for testing", cxxopts::value<long long>()->default_value("100"))
@@ -98,6 +99,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     opts.print = result["print"].as<bool>();
     opts.m = result["m"].as<int>();
     opts.m_test = result["m_test"].as<int>();
+    opts.print_all_gpu_operations = result["print_all_gpu_operations"].as<bool>();
     opts.distance_threshold_coarse = result["distance_threshold_coarse"].as<double>();
     opts.distance_threshold_finer = result["distance_threshold_finer"].as<double>();
     opts.log_append = result["log_append"].as<std::string>();
