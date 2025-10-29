@@ -125,14 +125,10 @@ __global__ void Matern32_scaled_matcov_kernel(const Real* __restrict__ X1, int l
             Real diff = x1 - x2;
             dist_sqaure += diff * diff * range[k];
         }
-        Real scaled_distance = sqrt(dist_sqaure);
-        Real a0 = 1.0;
-        Real a1 = 1.0;
-        // double a2 = 2.0 / 5.0;
-        // double a3 = 1.0 / 15.0;
-        Real item_poly = a0 + a1 * scaled_distance;
-        //  + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
-        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+        Real r = sqrt(dist_sqaure);
+        Real s = sqrt((Real)3.0) * r; // s = sqrt(2*nu) * (d/ell), nu=3/2
+        Real item_poly = (Real)1.0 + s;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - s );
     }
     // add nugget
     if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
@@ -157,12 +153,11 @@ __global__ void Matern52_scaled_matcov_kernel(const Real* __restrict__ X1, int l
             Real diff = x1 - x2;
             dist_sqaure += diff * diff * range[k];
         }
-        Real scaled_distance = sqrt(dist_sqaure);
-        Real a0 = 1.0;
-        Real a1 = 1.0;
-        Real a2 = 1.0 / 3.0;
-        Real item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance;
-        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+        Real r = sqrt(dist_sqaure);
+        Real s = sqrt((Real)5.0) * r; // s = sqrt(2*nu) * (d/ell), nu=5/2
+        // (1 + s + s^2/3) * exp(-s)
+        Real item_poly = (Real)1.0 + s + (s * s) / (Real)3.0;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - s );
     }
     // add nugget
     if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
@@ -188,13 +183,12 @@ __global__ void Matern72_scaled_matcov_kernel(
             Real diff = x1 - x2;
             dist_sqaure += diff * diff * range[k];
         }
-        Real scaled_distance = sqrt(dist_sqaure);
-        Real a0 = 1.0;
-        Real a1 = 1.0;
-        Real a2 = 2.0 / 5.0;
-        Real a3 = 1.0 / 15.0;
-        Real item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
-        C[i + j * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+        Real r = sqrt(dist_sqaure);
+        Real s = sqrt((Real)7.0) * r; // s = sqrt(2*nu) * (d/ell), nu=7/2
+        // (1 + s + 2/5 s^2 + 1/15 s^3) * exp(-s)
+        Real s2 = s * s;
+        Real item_poly = (Real)1.0 + s + (Real)(2.0/5.0) * s2 + (s2 * s) / (Real)15.0;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - s );
     }
     // add nugget
     if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {
@@ -220,13 +214,11 @@ __device__ void Matern72_scaled_matcov_vbatched_kernel_device(
             Real diff = x1 - x2;
             dist_sqaure += diff * diff * range[k];
         }
-        Real scaled_distance = sqrt(dist_sqaure);
-        Real a0 = 1.0;
-        Real a1 = 1.0;
-        Real a2 = 2.0 / 5.0;
-        Real a3 = 1.0 / 15.0;
-        Real item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance + a3 * scaled_distance * scaled_distance * scaled_distance;
-        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+        Real r = sqrt(dist_sqaure);
+        Real s = sqrt((Real)7.0) * r;
+        Real s2 = s * s;
+        Real item_poly = (Real)1.0 + s + (Real)(2.0/5.0) * s2 + (s2 * s) / (Real)15.0;
+        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - s );
     }
     // add nugget
     if (gtx == gty && gtx < ldx1 && gty < ldx2 && nugget_tag) {
@@ -252,12 +244,10 @@ __device__ void Matern52_scaled_matcov_vbatched_kernel_device(
             Real diff = x1 - x2;
             dist_sqaure += diff * diff * range[k];
         }
-        Real scaled_distance = sqrt(dist_sqaure);
-        Real a0 = 1.0;
-        Real a1 = 1.0;
-        Real a2 = 1.0 / 3.0;
-        Real item_poly = a0 + a1 * scaled_distance + a2 * scaled_distance * scaled_distance;
-        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+        Real r = sqrt(dist_sqaure);
+        Real s = sqrt((Real)5.0) * r;
+        Real item_poly = (Real)1.0 + s + (s * s) / (Real)3.0;
+        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - s );
     }
     // add nugget
     if (gtx == gty && gtx < ldx1 && gty < ldx2 && nugget_tag) {
@@ -283,12 +273,10 @@ __device__ void Matern32_scaled_matcov_vbatched_kernel_device(
             Real diff = x1 - x2;
             dist_sqaure += diff * diff * range[k];
         }
-        Real scaled_distance = sqrt(dist_sqaure);
-        Real a0 = 1.0;
-        Real a1 = 1.0;
-        // Real a2 = 1.0 / 2.0;
-        Real item_poly = a0 + a1 * scaled_distance;
-        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - scaled_distance );
+        Real r = sqrt(dist_sqaure);
+        Real s = sqrt((Real)3.0) * r;
+        Real item_poly = (Real)1.0 + s;
+        d_C[gtx + gty * ldc] = sigma2 * item_poly * exp( - s );
     }
     // add nugget
     if (gtx == gty && gtx < ldx1 && gty < ldx2 && nugget_tag) {
@@ -428,10 +416,11 @@ __global__ void Matern72_matcov_kernel(const Real* X1, int ldx1, int incx1, int 
             Real x2 = X2[j * incx2 + k * stridex2];
             dist_sqaure += (x1 - x2) * (x1 - x2);
         }
-        Real scaled_distance = sqrt(dist_sqaure) / range;
-        Real item_poly = 1 + sqrt((Real)7.0) * scaled_distance + (Real)7.0 * scaled_distance * scaled_distance / (Real)3.0;  
-        // + 7.0 * sqrt(7.0) * scaled_distance * scaled_distance * scaled_distance / 15.0; 
-        C[i + j * ldc] = sigma2 * item_poly * exp( - sqrt((Real)7.0) * scaled_distance );
+        Real r = sqrt(dist_sqaure) / range;
+        Real s = sqrt((Real)7.0) * r;
+        Real s2 = s * s;
+        Real item_poly = (Real)1.0 + s + (Real)(2.0/5.0) * s2 + (s2 * s) / (Real)15.0;
+        C[i + j * ldc] = sigma2 * item_poly * exp( - s );
     }
     // add nugget
     if (i == j && i < ldx1 && j < ldx2 && nugget_tag) {

@@ -72,6 +72,13 @@ struct Opts
     KernelType kernel_type;
     int range_offset;
     PrecisionType precision;
+    // model type: "gp" (default) or "sce" (spatial conditional extremes)
+    std::string model_type;
+    // offset of SCE parameters in theta vector (after kernel params and ranges)
+    int sce_offset;
+    // SCE anchor (conditioning) point location and observation value
+    std::vector<double> anchor_loc; // size dim
+    double anchor_val;
 
     // timing
     float time_covgen;

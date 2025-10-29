@@ -146,6 +146,20 @@ int main(int argc, char **argv)
                 exit(-1);
                 break;
         }
+        // Model-specific info
+        if (opts.model_type == "sce") {
+            std::cout << "Model: VCE (Vecchia Conditional Extremes)" << std::endl;
+            std::cout << "Range parameterization: shared across all spatial dimensions" << std::endl;
+            std::cout << "Anchor location: ";
+            for (int i=0;i<opts.anchor_loc.size();++i) {
+                std::cout << opts.anchor_loc[i] << (i+1<opts.anchor_loc.size()?", ":"");
+            }
+            std::cout << std::endl;
+            std::cout << "Anchor value: " << opts.anchor_val << std::endl;
+        } else {
+            std::cout << "Model: Simple GP" << std::endl;
+            std::cout << "Range parameterization: per-dimension (anisotropic)" << std::endl;
+        }
         std::cout << "Number of total points: " << opts.numPointsTotal << std::endl;
         std::cout << "Number of total blocks: " << opts.numBlocksTotal << std::endl;
         std::cout << "Number of total points_test: " << opts.numPointsTotal_test << std::endl;
@@ -444,31 +458,31 @@ int main(int argc, char **argv)
                     opts.upper_bounds[0] = 3.0;
                     opts.lower_bounds[1] = 0.01; // smoothness
                     opts.upper_bounds[1] = 2.0;
-                    opts.lower_bounds[2] = 0.00001; // nugget
+                    opts.lower_bounds[2] = 0.00000; // nugget
                     opts.upper_bounds[2] = 0.1;
                     break;
                 case KernelType::Matern72:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 2.0;
-                    opts.lower_bounds[1] = 0.00001; // nugget
+                    opts.lower_bounds[1] = 0.00000; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 case KernelType::Matern12:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 3.0;
-                    opts.lower_bounds[1] = 0.00001; // nugget
+                    opts.lower_bounds[1] = 0.00000; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 case KernelType::Matern32:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 3.0;
-                    opts.lower_bounds[1] = 0.00001; // nugget
+                    opts.lower_bounds[1] = 0.00000; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 case KernelType::Matern52:
                     opts.lower_bounds[0] = 0.01; // sigma2
                     opts.upper_bounds[0] = 3.0;
-                    opts.lower_bounds[1] = 0.00001; // nugget
+                    opts.lower_bounds[1] = 0.00000; // nugget
                     opts.upper_bounds[1] = 0.1;
                     break;
                 default:

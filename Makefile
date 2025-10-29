@@ -89,7 +89,7 @@ LIB+= -lstdc++
 #---------------- make -------------------------
 
 TARGET = $(BIN_DIR)/dbv
-OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o $(OBJ_DIR)/gpu_covariance.o $(OBJ_DIR)/vecchia_helper.o $(OBJ_DIR)/prediction.o
+OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/random_points.o  $(OBJ_DIR)/block_info.o $(OBJ_DIR)/distance_calc.o $(OBJ_DIR)/gpu_operations.o $(OBJ_DIR)/gpu_covariance.o $(OBJ_DIR)/vecchia_helper.o $(OBJ_DIR)/prediction.o $(OBJ_DIR)/extremes_transform.o
 
 # Add input_parser.h as a dependency for all object files
 DEPS=
@@ -97,6 +97,7 @@ DEPS+=include/input_parser.h
 DEPS+=include/gpu_covariance.h
 DEPS+=include/vecchia_helper.h
 DEPS+=include/prediction.h
+DEPS+=include/extremes_transform.h
 all: $(TARGET)
 
 $(TARGET): $(OBJS)

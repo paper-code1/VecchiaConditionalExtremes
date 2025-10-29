@@ -32,7 +32,7 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("distance_threshold_finer", "Distance threshold for blocks", cxxopts::value<double>()->default_value("0.05"))
     ("distance_scale", "Distance scale for blocks, used for scaling distance", cxxopts::value<std::vector<double>>())
     ("distance_scale_init", "Initial distance scale for blocks, used for optimization", cxxopts::value<std::vector<double>>())
-    ("kernel_type", "Kernel type", cxxopts::value<std::string>()->default_value("Matern72"))
+    ("kernel_type", "Kernel type", cxxopts::value<std::string>()->default_value("Matern32"))
     ("precision", "Floating point precision (double|float)", cxxopts::value<std::string>()->default_value("double"))
     ("theta_init", "Initial parameters for optimization", cxxopts::value<std::vector<double>>())
     ("lower_bounds", "Lower bounds for optimization", cxxopts::value<std::vector<double>>())
@@ -52,8 +52,12 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
     ("num_simulations", "Number of simulations for evaluation", cxxopts::value<int>()->default_value("1000"))
     ("omp_num_threads", "Number of threads for OpenMP", cxxopts::value<int>()->default_value("20"))
     ("log_append", "Append to the log file", cxxopts::value<std::string>()->default_value(""))
-    ("nn_multiplier", "Number of nearest neighbors multiplier", cxxopts::value<int>()->default_value("400"))
+    ("nn_multiplier", "Number of nearest neighbors multiplier", cxxopts::value<int>()->default_value("99999"))
     ("perf", "Enable performance warmup (0/1)", cxxopts::value<int>()->default_value("1"))
+    ("model_type", "Model type: gp|sce (spatial conditional extremes)", cxxopts::value<std::string>()->default_value("sce"))
+    ("sce_params", "VCE params: lambda_a,kappa_a,beta,mu,tau,delta1", cxxopts::value<std::vector<double>>())
+    ("anchor_loc", "Anchor location (comma-separated, length=dim)", cxxopts::value<std::vector<double>>())
+    ("anchor_val", "Anchor observation value", cxxopts::value<double>()->default_value("0"))
     ("help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -181,13 +185,46 @@ inline bool parse_args(int argc, char **argv, Opts &opts)
             break;
         }
     }
-    // append the distance scale to the theta_init
-    opts.theta_init.insert(opts.theta_init.end(), opts.distance_scale_init.begin(), opts.distance_scale_init.end());
+    // model type
+    opts.model_type = result["model_type"].as<std::string>();
+    // append range parameters to theta_init
+    if (opts.model_type == "sce") {
+        // use a single shared range parameter for all spatial dims
+        double r0 = 1.0;
+        if (!opts.distance_scale_init.empty()) r0 = opts.distance_scale_init[0];
+        opts.theta_init.push_back(r0);
+        // Append SCE parameters from CLI if provided; else defaults
+        if (result.count("sce_params")) {
+            auto sce = result["sce_params"].as<std::vector<double>>();
+            if (sce.size() != 6) {
+                if (rank == 0) {
+                    std::cerr << "--sce_params must have 6 values: lambda_a,kappa_a,beta,mu,tau,delta1" << std::endl;
+                }
+                return false;
+            }
+            opts.theta_init.insert(opts.theta_init.end(), sce.begin(), sce.end());
+        } else {
+            std::vector<double> sce_defaults = {.1, .1, .1, .1, .1, .1};
+            opts.theta_init.insert(opts.theta_init.end(), sce_defaults.begin(), sce_defaults.end());
+        }
+    } else {
+        // GP: per-dimension range parameters
+        opts.theta_init.insert(opts.theta_init.end(), opts.distance_scale_init.begin(), opts.distance_scale_init.end());
+    }
     // add the theta_init to the bounds
     for (int i=0; i < opts.theta_init.size(); i++) {
         opts.lower_bounds.push_back(opts.theta_init[i] * 0.001);
         opts.upper_bounds.push_back(opts.theta_init[i] * 10);
     }
+    // position offsets
+    opts.sce_offset = (int)opts.theta_init.size() - (opts.model_type == "sce" ? 6 : 0);
+    // anchor
+    if (result.count("anchor_loc")) {
+        opts.anchor_loc = result["anchor_loc"].as<std::vector<double>>();
+    } else {
+        opts.anchor_loc = std::vector<double>(opts.dim, 0.0);
+    }
+    opts.anchor_val = result["anchor_val"].as<double>();
     // other options
     opts.kmeans_max_iter = result["kmeans_max_iter"].as<int>();
     opts.train_metadata_path = result["train_metadata_path"].as<std::string>();

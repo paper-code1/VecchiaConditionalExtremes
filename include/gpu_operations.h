@@ -64,6 +64,10 @@ struct GpuDataT
     Real *d_observations_copy_device;
     
     Real *d_range_device;
+    // SCE accumulators per block
+    Real *d_sce_sum_log_fdl;
+    Real *d_sce_sum_log_b;
+    Real *d_sce_sum_y_sq;
     
     // pointers for matrix and vectors 
     Real **d_locs_array;

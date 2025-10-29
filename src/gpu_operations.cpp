@@ -3,11 +3,14 @@
 #include <mpi.h>
 #include <magma_v2.h>
 #include <sys/cdefs.h>
+#include <thrust/device_ptr.h>
+#include <thrust/reduce.h>
 #include "gpu_operations.h"
 #include "gpu_covariance.h"
 #include "flops.h"
 #include "error_checking.h"
 #include "magma_dprint_gpu.h"
+#include "extremes_transform.h"
 
 template <typename Real>
 struct MagmaOps;
@@ -352,8 +355,16 @@ GpuDataT<Real> copyDataToGPU(const Opts &opts, const std::vector<BlockInfo> &blo
                cudaMemcpyHostToDevice));
     
 
-    // copy data from host to device
+    // allocate SCE accumulators (one per block)
     size_t batchCount = gpuData.ldda_locs.size() - 1;
+    checkCudaError(cudaMalloc(&gpuData.d_sce_sum_log_fdl, (batchCount) * sizeof(Real)));
+    checkCudaError(cudaMalloc(&gpuData.d_sce_sum_log_b,   (batchCount) * sizeof(Real)));
+    checkCudaError(cudaMalloc(&gpuData.d_sce_sum_y_sq,    (batchCount) * sizeof(Real)));
+    checkCudaError(cudaMemset(gpuData.d_sce_sum_log_fdl, 0, (batchCount) * sizeof(Real)));
+    checkCudaError(cudaMemset(gpuData.d_sce_sum_log_b,   0, (batchCount) * sizeof(Real)));
+    checkCudaError(cudaMemset(gpuData.d_sce_sum_y_sq,    0, (batchCount) * sizeof(Real)));
+
+    // copy data from host to device
     // allocate memory for magma use
     checkMagmaError(magma_imalloc(&gpuData.dinfo_magma, batchCount + 1));
     // Set dinfo_magma to 0
@@ -432,9 +443,15 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
                                    cudaMemcpyDeviceToDevice));
     {
         std::vector<Real> inv_range2_host(opts.dim);
-        for (int i=0;i<opts.dim;++i) {
-            Real r = static_cast<Real>(theta[range_offset + i]);
-            inv_range2_host[i] = (Real)1.0 / (r * r);
+        if (opts.model_type == "sce") {
+            Real r = static_cast<Real>(theta[range_offset]);
+            Real val = (Real)1.0 / (r * r);
+            for (int i=0;i<opts.dim;++i) inv_range2_host[i] = val;
+        } else {
+            for (int i=0;i<opts.dim;++i) {
+                Real r = static_cast<Real>(theta[range_offset + i]);
+                inv_range2_host[i] = (Real)1.0 / (r * r);
+            }
         }
         checkCudaError(cudaMemcpy(gpuData.d_range_device, inv_range2_host.data(), opts.dim * sizeof(Real), cudaMemcpyHostToDevice));
     }
@@ -466,6 +483,38 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
     double t_trsm_final = 0.0;
     double t_norm2_batch = 0.0;
     double t_log_det_batch = 0.0;
+
+    // If model is SCE, transform observations to latent Gaussian per block and
+    // compute Jacobian constants. theta layout: [kernel params..., distance scales..., sce params]
+    if (opts.model_type == "sce") {
+        // Extract SCE params from theta (last 6 entries): lambda_a, kappa_a, beta, mu, tau, delta1
+        int ntheta = (int)theta.size();
+        Real lambda_a = (Real)1.0, kappa_a = (Real)1.0, beta = (Real)1.0, mu = (Real)0.0, tau = (Real)1.0, delta1 = (Real)1.0;
+        if (ntheta >= opts.range_offset - 1 + opts.dim + 6) {
+            lambda_a = (Real)theta[ntheta - 6];
+            kappa_a  = (Real)theta[ntheta - 5];
+            beta     = (Real)theta[ntheta - 4];
+            mu       = (Real)theta[ntheta - 3];
+            tau      = (Real)theta[ntheta - 2];
+            delta1   = (Real)theta[ntheta - 1];
+        }
+        // Transform using the COPY arrays; fill per-block device sums (no reduction here)
+        // anchor from input (dim=2 assumed for SCE)
+        Real s0x = (opts.anchor_loc.size() > 0) ? (Real)opts.anchor_loc[0] : (Real)0.0;
+        Real s0y = (opts.anchor_loc.size() > 1) ? (Real)opts.anchor_loc[1] : (Real)0.0;
+        Real x0 = (Real)opts.anchor_val;
+        sce_transform<Real>(
+            gpuData.d_locs_array, d_lda_locs, gpuData.total_locs_num_device,
+            gpuData.d_locs_neighbors_array, d_lda_locs_neighbors, gpuData.total_locs_neighbors_num_device,
+            (int)batchCount, opts.dim,
+            gpuData.d_observations_copy_array, gpuData.d_observations_neighbors_copy_array,
+            s0x, s0y, x0,
+            lambda_a, kappa_a, beta,
+            mu, tau, delta1,
+            gpuData.d_sce_sum_log_fdl, gpuData.d_sce_sum_log_b, gpuData.d_sce_sum_y_sq,
+            stream);
+        checkCudaError(cudaStreamSynchronize(stream));
+    }
 
     // 1) MatGen cov blocks
     double local_t_matgen_cov_blocks = time_region([&](){
@@ -592,10 +641,33 @@ double performComputationOnGPU(const GpuDataT<Real> &gpuData, const std::vector<
         });
         MPI_Allreduce(&local_t, &t_log_det_batch, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     }
-    // sum for log-likelihood
-    double log_likelihood = -0.5 *(
-        log_det_item + norm2_item // the constant term is removed for simplicity
-    );
+    // sum for log-likelihood (latent GP part)
+    double latent_ll = -0.5 *( log_det_item + norm2_item );
+    // std::cout << "log_det_item = " << log_det_item << std::endl;
+    // std::cout << "norm2_item = " << norm2_item << std::endl;
+    double log_likelihood = latent_ll;
+    if (opts.model_type == "sce") {
+        // Single reduction of device per-block sums to scalars (done in .cu), then MPI sum
+        Real s1 = device_sum<Real>(gpuData.d_sce_sum_log_fdl, (int)batchCount, stream);
+        Real s2 = device_sum<Real>(gpuData.d_sce_sum_log_b,   (int)batchCount, stream);
+        Real s3 = device_sum<Real>(gpuData.d_sce_sum_y_sq,    (int)batchCount, stream);
+        double S1=0,S2=0,S3=0; double t1=(double)s1,t2=(double)s2,t3=(double)s3;
+        MPI_Allreduce(&t1,&S1,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(&t2,&S2,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(&t3,&S3,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+        double sce_ll = S1 + 0.5 * S3 - S2;
+        log_likelihood += sce_ll;
+        int rank_debug = 0; MPI_Comm_rank(MPI_COMM_WORLD, &rank_debug);
+        if (rank_debug == 0 && opts.print) {
+            std::cout << std::fixed << std::setprecision(6)
+                      << "[DEBUG] Latent GP loglik: " << latent_ll
+                      << ", SCE terms: " << sce_ll
+                      << " (sum_log_fdl=" << S1
+                      << ", sum_log_b=" << S2
+                      << ", sum_y_sq=" << S3 << ")"
+                      << ", Total: " << log_likelihood << std::endl;
+        }
+    }
     double log_likelihood_all = 0;
     // mpi sum for log-likelihood
     MPI_Allreduce(&log_likelihood, &log_likelihood_all, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -640,6 +712,9 @@ void cleanupGpuMemory(GpuDataT<Real> &gpuData)
     cudaFree(gpuData.d_observations_neighbors_device);
     cudaFree(gpuData.d_observations_neighbors_copy_device);
     cudaFree(gpuData.d_observations_copy_device);
+    cudaFree(gpuData.d_sce_sum_log_fdl);
+    cudaFree(gpuData.d_sce_sum_log_b);
+    cudaFree(gpuData.d_sce_sum_y_sq);
     
 
     delete[] gpuData.h_cov_array;
